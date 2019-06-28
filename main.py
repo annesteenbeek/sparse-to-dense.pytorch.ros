@@ -38,18 +38,25 @@ def create_data_loaders(args):
         sparsifier = UniformSampling(num_samples=args.num_samples, max_depth=max_depth)
     elif args.sparsifier == SimulatedStereo.name:
         sparsifier = SimulatedStereo(num_samples=args.num_samples, max_depth=max_depth)
+    elif args.sparsifier == StaticSampling.name:
+        sparsifier = StaticSampling(pixx=args.pixx, pixy=args.pixy)
+    elif args.sparsifier == ProjectiveSampling.name:
+        sparsifier = ProjectiveSampling(pixx=args.pixx, pixy=args.pixy)
+    else
+        print("Unknown sparsifier")
 
     if args.data == 'nyudepthv2':
         from dataloaders.nyu_dataloader import NYUDataset
         if not args.evaluate:
             train_dataset = NYUDataset(traindir, type='train',
-                modality=args.modality, sparsifier=sparsifier)
+                modality=args.modality, sparsifier=sparsifier, augArgs=args)
         val_dataset = NYUDataset(valdir, type='val',
-            modality=args.modality, sparsifier=sparsifier)
+            modality=args.modality, sparsifier=sparsifier, augArgs=args)
 
     elif args.data == 'kitti':
         from dataloaders.kitti_dataloader import KITTIDataset
         if not args.evaluate:
+            print("Kitti is not yet implemented")
             train_dataset = KITTIDataset(traindir, type='train',
                 modality=args.modality, sparsifier=sparsifier)
         val_dataset = KITTIDataset(valdir, type='val',

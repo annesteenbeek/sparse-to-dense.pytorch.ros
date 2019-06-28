@@ -18,7 +18,7 @@ class DenseToSparse:
 
 class ProjectiveSampling(DenseToSparse):
     name = "projsam"
-    def __init__(self, max_depth=np.inf, pixx=114, pixy=152):
+    def __init__(self, pixx=114, pixy=152):
         DenseToSparse.__init__(self)
         self.pixx = pixx
         self.pixy = pixy

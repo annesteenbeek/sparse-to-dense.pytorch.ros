@@ -47,7 +47,7 @@ class MyDataloader(data.Dataset):
     modality_names = ['rgb', 'rgbd', 'd'] # , 'g', 'gd'
     color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
 
-    def __init__(self, root, type, sparsifier=None, modality='rgb', loader=h5_loader):
+    def __init__(self, root, type, sparsifier=None, modality='rgb', loader=h5_loader, augArgs=None):
         classes, class_to_idx = find_classes(root)
         imgs = make_dataset(root, class_to_idx)
         assert len(imgs)>0, "Found 0 images in subfolders of: " + root + "\n"
@@ -65,15 +65,16 @@ class MyDataloader(data.Dataset):
                                 "Supported dataset types are: train, val"))
         self.loader = loader
         self.sparsifier = sparsifier
+        self.augArgs = augArgs
 
         assert (modality in self.modality_names), "Invalid modality type: " + modality + "\n" + \
                                 "Supported dataset types are: " + ''.join(self.modality_names)
         self.modality = modality
 
-    def train_transform(self, rgb, depth):
+    def train_transform(self, rgb, depth, augArgs=None):
         raise (RuntimeError("train_transform() is not implemented. "))
 
-    def val_transform(rgb, depth):
+    def val_transform(rgb, depth, augArgs=None):
         raise (RuntimeError("val_transform() is not implemented."))
 
     def create_sparse_depth(self, rgb, depth):
@@ -105,7 +106,7 @@ class MyDataloader(data.Dataset):
     def __getitem__(self, index):
         rgb, depth = self.__getraw__(index)
         if self.transform is not None:
-            rgb_np, depth_np = self.transform(rgb, depth)
+            rgb_np, depth_np = self.transform(rgb, depth, augArgs=None)
         else:
             raise(RuntimeError("transform not defined"))
 

@@ -57,6 +57,20 @@ def parse_command():
     parser.add_argument('--no-pretrain', dest='pretrained', action='store_false',
                         help='not to use ImageNet pre-trained weights')
     parser.set_defaults(pretrained=True)
+    parser.add_argument('--scale-min', default=1.0, type=float, metavar='scaleMin',
+                        help='random image scaling minimum bound')
+    parser.add_argument('--scale-max', default=1.5, type=float, metavar='scaleMax',
+                        help='random image scaling maximum bound')
+    parser.add_argument('--global-scale-means', dest="scaleMeans", default=1.0, type=tuple,
+                        help='the mean values to sample gaussian global scale groups from')
+    parser.add_argument('--global-scale-variances', dest="scaleVars", default=0.0, type=tuple,
+                        help='the variance values to sample gaussian global scale groups from')
+    parser.add_argument('--variable-focal', dest='varFocus', action='store_true',
+                        help='simulate variable focal length data')
+    parser.set_defaults(varFocus=False)
+    parser.add_argument('--var-scale', dest='varScale', action='store_true',
+                        help='simulate variable scale (depth group) data')
+    parser.set_defaults(pretrained=False)
     args = parser.parse_args()
     if args.modality == 'rgb' and args.num_samples != 0:
         print("number of samples is forced to be 0 when input modality is rgb")
@@ -64,6 +78,8 @@ def parse_command():
     if args.modality == 'rgb' and args.max_depth != 0.0:
         print("max depth is forced to be 0.0 when input modality is rgb/rgbd")
         args.max_depth = 0.0
+    if args.varScale and args.scaleMeans == 1.0:
+        print("Variable scale is enabled but only the 1.0 depth group is specified")
     return args
 
 def save_checkpoint(state, is_best, epoch, output_directory):
