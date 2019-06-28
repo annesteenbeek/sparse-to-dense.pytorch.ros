@@ -16,6 +16,43 @@ class DenseToSparse:
     def __repr__(self):
         pass
 
+class ProjectiveSampling(DenseToSparse):
+    name = "projsam"
+    def __init__(self, max_depth=np.inf, pixx=114, pixy=152):
+        DenseToSparse.__init__(self)
+        self.pixx = pixx
+        self.pixy = pixy
+
+    def __repr__(self):
+        return "%s{ns=%d,md=%f,pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixxy)
+
+    def dense_to_sparse(self, rgb, depth):
+        """
+        Applies the projective equations to the depth map to calculate where the physical sensor would
+        read a pixel from, then returns a boolean mask with a 1 in this position and zeros elsewhere.
+        """
+        #Note, need to handle 0 depth vals properly
+        disp("Not implemented yet")
+        return 0
+
+class StaticSampling(DenseToSparse):
+    name = "statsam"
+    def __init__(self, max_depth=np.inf, pixx=114, pixy=152):
+        DenseToSparse.__init__(self)
+        self.pixx = pixx
+        self.pixy = pixy
+
+    def __repr__(self):
+        return "%s{ns=%d,md=%f,pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixxy)
+
+    def dense_to_sparse(self, rgb, depth):
+        """
+        Returns a boolean mask with 1 at [pixy,pixx] and zeros everywhere else
+        """
+        mask = np.zeros((depth.shape), dtype=bool)
+        mask[pixy,pixx] = True
+        return mask
+
 class UniformSampling(DenseToSparse):
     name = "uar"
     def __init__(self, num_samples, max_depth=np.inf):

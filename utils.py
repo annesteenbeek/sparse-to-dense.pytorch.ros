@@ -41,7 +41,7 @@ def parse_command():
                         help='number of total epochs to run (default: 15)')
     parser.add_argument('-c', '--criterion', metavar='LOSS', default='l1', choices=loss_names,
                         help='loss function: ' + ' | '.join(loss_names) + ' (default: l1)')
-    parser.add_argument('-b', '--batch-size', default=8, type=int, help='mini-batch size (default: 8)')
+    parser.add_argument('-b', '--batch-size', default=16, type=int, help='mini-batch size (default: 8)')
     parser.add_argument('--lr', '--learning-rate', default=0.01, type=float,
                         metavar='LR', help='initial learning rate (default 0.01)')
     parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
