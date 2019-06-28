@@ -37,13 +37,13 @@ class ProjectiveSampling(DenseToSparse):
 
 class StaticSampling(DenseToSparse):
     name = "statsam"
-    def __init__(self, max_depth=np.inf, pixx=114, pixy=152):
+    def __init__(self, pixx=114, pixy=152):
         DenseToSparse.__init__(self)
         self.pixx = pixx
         self.pixy = pixy
 
     def __repr__(self):
-        return "%s{ns=%d,md=%f,pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixxy)
+        return "%s{pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixy)
 
     def dense_to_sparse(self, rgb, depth):
         """
