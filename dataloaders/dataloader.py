@@ -47,7 +47,7 @@ class MyDataloader(data.Dataset):
     modality_names = ['rgb', 'rgbd', 'd'] # , 'g', 'gd'
     color_jitter = transforms.ColorJitter(0.4, 0.4, 0.4)
 
-    def __init__(self, root, type, sparsifier=None, modality='rgb', loader=h5_loader, augArgs=None):
+    def __init__(self, root, type, sparsifier=None, modality='rgb', augArgs=None, loader=h5_loader):
         classes, class_to_idx = find_classes(root)
         imgs = make_dataset(root, class_to_idx)
         assert len(imgs)>0, "Found 0 images in subfolders of: " + root + "\n"
@@ -56,6 +56,7 @@ class MyDataloader(data.Dataset):
         self.imgs = imgs
         self.classes = classes
         self.class_to_idx = class_to_idx
+        self.augArgs = augArgs
         if type == 'train':
             self.transform = self.train_transform
         elif type == 'val':
@@ -65,16 +66,15 @@ class MyDataloader(data.Dataset):
                                 "Supported dataset types are: train, val"))
         self.loader = loader
         self.sparsifier = sparsifier
-        self.augArgs = augArgs
 
         assert (modality in self.modality_names), "Invalid modality type: " + modality + "\n" + \
                                 "Supported dataset types are: " + ''.join(self.modality_names)
         self.modality = modality
 
-    def train_transform(self, rgb, depth, augArgs=None):
+    def train_transform(self, rgb, depth):
         raise (RuntimeError("train_transform() is not implemented. "))
 
-    def val_transform(rgb, depth, augArgs=None):
+    def val_transform(rgb, depth):
         raise (RuntimeError("val_transform() is not implemented."))
 
     def create_sparse_depth(self, rgb, depth):
@@ -105,8 +105,9 @@ class MyDataloader(data.Dataset):
 
     def __getitem__(self, index):
         rgb, depth = self.__getraw__(index)
+        augArgs = self.augArgs
         if self.transform is not None:
-            rgb_np, depth_np = self.transform(rgb, depth, augArgs=None)
+            rgb_np, depth_np = self.transform(rgb, depth)
         else:
             raise(RuntimeError("transform not defined"))
 

@@ -10,7 +10,7 @@ cudnn.benchmark = True
 
 from models import ResNet
 from metrics import AverageMeter, Result
-from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo
+from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling
 import criteria
 import utils
 
@@ -42,7 +42,7 @@ def create_data_loaders(args):
         sparsifier = StaticSampling(pixx=args.pixx, pixy=args.pixy)
     elif args.sparsifier == ProjectiveSampling.name:
         sparsifier = ProjectiveSampling(pixx=args.pixx, pixy=args.pixy)
-    else
+    else:
         print("Unknown sparsifier")
 
     if args.data == 'nyudepthv2':

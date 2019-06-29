@@ -50,7 +50,7 @@ class StaticSampling(DenseToSparse):
         Returns a boolean mask with 1 at [pixy,pixx] and zeros everywhere else
         """
         mask = np.zeros((depth.shape), dtype=bool)
-        mask[pixy,pixx] = True
+        mask[self.pixy,self.pixx] = True
         return mask
 
 class UniformSampling(DenseToSparse):

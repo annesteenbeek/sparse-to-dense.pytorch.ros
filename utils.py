@@ -11,8 +11,8 @@ def parse_command():
     model_names = ['resnet18', 'resnet50']
     loss_names = ['l1', 'l2']
     data_names = ['nyudepthv2', 'kitti']
-    from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo
-    sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo]]
+    from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling
+    sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling]]
     from models import Decoder
     decoder_names = Decoder.names
     from dataloaders.dataloader import MyDataloader
@@ -48,19 +48,14 @@ def parse_command():
                         help='momentum')
     parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
                         metavar='W', help='weight decay (default: 1e-4)')
-    parser.add_argument('--print-freq', '-p', default=10, type=int,
-                        metavar='N', help='print frequency (default: 10)')
-    parser.add_argument('--resume', default='', type=str, metavar='PATH',
-                        help='path to latest checkpoint (default: none)')
-    parser.add_argument('-e', '--evaluate', dest='evaluate', type=str, default='',
-                        help='evaluate model on validation set')
-    parser.add_argument('--no-pretrain', dest='pretrained', action='store_false',
-                        help='not to use ImageNet pre-trained weights')
-    parser.set_defaults(pretrained=True)
     parser.add_argument('--scale-min', default=1.0, type=float, metavar='scaleMin',
                         help='random image scaling minimum bound')
     parser.add_argument('--scale-max', default=1.5, type=float, metavar='scaleMax',
                         help='random image scaling maximum bound')
+    parser.add_argument('--pixx', default=114, type=int, metavar='pixx',
+                        help='pixel x location to use with static sampler after resizing to half')
+    parser.add_argument('--pixy', default=152, type=int, metavar='pixy',
+                        help='pixel y location to use with static sampler after resizing to half')
     parser.add_argument('--global-scale-means', dest="scaleMeans", default=1.0, type=tuple,
                         help='the mean values to sample gaussian global scale groups from')
     parser.add_argument('--global-scale-variances', dest="scaleVars", default=0.0, type=tuple,
@@ -71,6 +66,15 @@ def parse_command():
     parser.add_argument('--var-scale', dest='varScale', action='store_true',
                         help='simulate variable scale (depth group) data')
     parser.set_defaults(pretrained=False)
+    parser.add_argument('--print-freq', '-p', default=10, type=int,
+                        metavar='N', help='print frequency (default: 10)')
+    parser.add_argument('--resume', default='', type=str, metavar='PATH',
+                        help='path to latest checkpoint (default: none)')
+    parser.add_argument('-e', '--evaluate', dest='evaluate', type=str, default='',
+                        help='evaluate model on validation set')
+    parser.add_argument('--no-pretrain', dest='pretrained', action='store_false',
+                        help='not to use ImageNet pre-trained weights')
+    parser.set_defaults(pretrained=True)
     args = parser.parse_args()
     if args.modality == 'rgb' and args.num_samples != 0:
         print("number of samples is forced to be 0 when input modality is rgb")

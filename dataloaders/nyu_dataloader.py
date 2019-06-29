@@ -9,27 +9,27 @@ class NYUDataset(MyDataloader):
         super(NYUDataset, self).__init__(root, type, sparsifier, modality, augArgs)
         self.output_size = (228, 304)
 
-    def train_transform(self, rgb, depth, augArgs=None):
-        if(augArgs.scale_min is None):
+    def train_transform(self, rgb, depth):
+        if(self.augArgs.scale_min is None):
             scaleMin = 1.0
         else:
-            scaleMin = augArgs.scale_min
-        if(augArgs.scale_max is None):
+            scaleMin = self.augArgs.scale_min
+        if(self.augArgs.scale_max is None):
             scaleMax = 1.5
         else:
-            scaleMax = augArgs.scale_max
+            scaleMax = self.augArgs.scale_max
         s = np.random.uniform(scaleMin, scaleMax) # random scaling factor
-        
-        if(augArgs.varFocus): #Variable focal length simulation
+
+        if(self.augArgs.varFocus): #Variable focal length simulation
             depth_np = depth
         else:
             depth_np = depth / s #Correct for focal length
-        
-        if(augArgs.varScale): #Variable global scale simulation
+
+        if(self.augArgs.varScale): #Variable global scale simulation
             #Sample a depth group from a gaussian
-            idx = np.random.randint(0,len(augArgs.scaleMeans),1)
-            mean = augArgs.scaleMeans[idx]
-            variance = augArgs.scaleVars[idx]
+            idx = np.random.randint(0,len(self.augArgs.scaleMeans),1)
+            mean = self.augArgs.scaleMeans[idx]
+            variance = self.augArgs.scaleVars[idx]
             scale = np.random.normal(mean,variance,1)
             depth_np = depth*scale
 
@@ -51,7 +51,7 @@ class NYUDataset(MyDataloader):
 
         return rgb_np, depth_np
 
-    def val_transform(self, rgb, depth, augArgs=None):
+    def val_transform(self, rgb, depth):
         depth_np = depth
         transform = transforms.Compose([
             transforms.Resize(240.0 / iheight),
