@@ -8,6 +8,10 @@ from PIL import Image
 cmap = plt.cm.viridis
 
 def parse_command():
+    #Set the depth groups as a tuple here if using --variable-scale
+    scaleMeans = (1.0,1.5)
+    scaleVariances = (0.0,0.1)
+    
     model_names = ['resnet18', 'resnet50']
     loss_names = ['l1', 'l2']
     data_names = ['nyudepthv2', 'kitti']
@@ -56,14 +60,10 @@ def parse_command():
                         help='pixel x location to use with static sampler after resizing to half')
     parser.add_argument('--pixy', default=152, type=int, metavar='pixy',
                         help='pixel y location to use with static sampler after resizing to half')
-    parser.add_argument('--global-scale-means', dest="scaleMeans", default=1.0, type=tuple,
-                        help='the mean values to sample gaussian global scale groups from')
-    parser.add_argument('--global-scale-variances', dest="scaleVars", default=0.0, type=tuple,
-                        help='the variance values to sample gaussian global scale groups from')
     parser.add_argument('--variable-focal', dest='varFocus', action='store_true',
                         help='simulate variable focal length data')
     parser.set_defaults(varFocus=False)
-    parser.add_argument('--var-scale', dest='varScale', action='store_true',
+    parser.add_argument('--variable-scale', dest='varScale', action='store_true',
                         help='simulate variable scale (depth group) data')
     parser.set_defaults(pretrained=False)
     parser.add_argument('--print-freq', '-p', default=10, type=int,
@@ -82,8 +82,12 @@ def parse_command():
     if args.modality == 'rgb' and args.max_depth != 0.0:
         print("max depth is forced to be 0.0 when input modality is rgb/rgbd")
         args.max_depth = 0.0
-    if args.varScale and args.scaleMeans == 1.0:
-        print("Variable scale is enabled but only the 1.0 depth group is specified")
+    if args.varScale:
+        print("\n\n         =========\nIMPORTANT: Variable depth groups are enabled, make sure to set these values at the top of the utils.py file\n         =========\n\n")
+        if(isinstance(scaleMeans, tuple)):
+            assert(len(scaleMeans) == len(scaleVariances))
+    args.scaleMeans = scaleMeans
+    args.scaleVariances = scaleVariances
     return args
 
 def save_checkpoint(state, is_best, epoch, output_directory):

@@ -2,4 +2,10 @@ python3 main.py -a resnet50 -d deconv3 -m rgbd -s 100 --data nyudepthv2
 
 python3 main.py -a resnet50 -d deconv3 -m rgbd -s 1 --data nyudepthv2
 
+python3 main.py -a resnet50 -d deconv3 -m rgbd -s 100 --sparsifier statsam --data nyudepthv2
+
+python3 main.py -a resnet50 -d deconv3 -m rgb --data nyudepthv2
+
 python3 main.py -a resnet50 -d deconv3 -m rgbd -s 100 --data nyudepthv2
+
+python3 main.py -a resnet50 -d deconv3 -m rgbd --sparsifier statsam --variable-focal --data nyudepthv2

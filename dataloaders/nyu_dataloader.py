@@ -10,15 +10,7 @@ class NYUDataset(MyDataloader):
         self.output_size = (228, 304)
 
     def train_transform(self, rgb, depth):
-        if(self.augArgs.scale_min is None):
-            scaleMin = 1.0
-        else:
-            scaleMin = self.augArgs.scale_min
-        if(self.augArgs.scale_max is None):
-            scaleMax = 1.5
-        else:
-            scaleMax = self.augArgs.scale_max
-        s = np.random.uniform(scaleMin, scaleMax) # random scaling factor
+        s = self.getFocalScale()
 
         if(self.augArgs.varFocus): #Variable focal length simulation
             depth_np = depth
@@ -26,12 +18,8 @@ class NYUDataset(MyDataloader):
             depth_np = depth / s #Correct for focal length
 
         if(self.augArgs.varScale): #Variable global scale simulation
-            #Sample a depth group from a gaussian
-            idx = np.random.randint(0,len(self.augArgs.scaleMeans),1)
-            mean = self.augArgs.scaleMeans[idx]
-            variance = self.augArgs.scaleVars[idx]
-            scale = np.random.normal(mean,variance,1)
-            depth_np = depth*scale
+            scale = self.getDepthGroup()
+            depth_np = depth_np*scale
 
         angle = np.random.uniform(-5.0, 5.0) # random rotation degrees
         do_flip = np.random.uniform(0.0, 1.0) < 0.5 # random horizontal flip
@@ -52,11 +40,26 @@ class NYUDataset(MyDataloader):
         return rgb_np, depth_np
 
     def val_transform(self, rgb, depth):
-        depth_np = depth
-        transform = transforms.Compose([
-            transforms.Resize(240.0 / iheight),
-            transforms.CenterCrop(self.output_size),
-        ])
+        s = self.getFocalScale()
+
+        if(self.augArgs.varScale): #Variable global scale simulation
+            scale = self.getDepthGroup()
+            depth_np = depth*scale
+        else:
+            depth_np = depth
+
+        if(self.augArgs.varFocus):
+            transform = transforms.Compose([
+                transforms.Resize(240.0 / iheight),
+                transforms.Resize(s), #Resize both images without correcting the depth values
+                transforms.CenterCrop(self.output_size),
+            ])
+        else:
+            transform = transforms.Compose([
+                transforms.Resize(240.0 / iheight),
+                transforms.CenterCrop(self.output_size),
+            ])
+
         rgb_np = transform(rgb)
         rgb_np = np.asfarray(rgb_np, dtype='float') / 255
         depth_np = transform(depth_np)

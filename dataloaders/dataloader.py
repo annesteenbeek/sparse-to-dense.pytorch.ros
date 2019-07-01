@@ -133,6 +133,27 @@ class MyDataloader(data.Dataset):
     def __len__(self):
         return len(self.imgs)
 
+    def getFocalScale(self):
+        #Returns a float which is the focal length scale factor
+        scaleMin = self.augArgs.scale_min
+        scaleMax = self.augArgs.scale_max
+        s = np.random.uniform(scaleMin, scaleMax) # random scaling factor
+        return s
+    
+    def getDepthGroup(self):
+        #Returns a float which is the depth group scale factor, sampled from a gaussian 
+        # centered on a randomly selected element of the global-scale-variances list
+        if(isinstance(self.augArgs.scaleMeans, float)): #If no tuple is provided
+            mean = self.augArgs.scaleMeans
+            variance = self.augArgs.scaleVariances
+            scale = np.random.normal(mean,variance,1)
+        else:
+            idx = np.random.randint(0,len(self.augArgs.scaleMeans))
+            mean = self.augArgs.scaleMeans[idx]
+            variance = self.augArgs.scaleVariances[idx]
+            scale = np.random.normal(mean,variance,1)
+        return scale
+
     # def __get_all_item__(self, index):
     #     """
     #     Args:
