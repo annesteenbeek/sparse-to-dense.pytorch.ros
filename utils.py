@@ -9,8 +9,8 @@ cmap = plt.cm.viridis
 
 def parse_command():
     #Set the depth groups as a tuple here if using --variable-scale
-    scaleMeans = (1.0,1.5)
-    scaleVariances = (0.0,0.1)
+    scaleMeans = (0.0,0.1,1.0,1.5)
+    scaleVariances = (0.0,0.0,0.0,0.0)
     
     model_names = ['resnet18', 'resnet50']
     loss_names = ['l1', 'l2']
@@ -109,10 +109,10 @@ def adjust_learning_rate(optimizer, epoch, lr_init):
 
 def get_output_directory(args):
     output_directory = os.path.join('results',
-        '{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}'.
+        '{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}.varFocus={}.varScale={}'.
         format(args.data, args.sparsifier, args.num_samples, args.modality, \
             args.arch, args.decoder, args.criterion, args.lr, args.batch_size, \
-            args.pretrained))
+            args.pretrained, args.varFocus, args.varScale))
     return output_directory
 
 
