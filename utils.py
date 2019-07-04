@@ -108,7 +108,14 @@ def adjust_learning_rate(optimizer, epoch, lr_init):
         param_group['lr'] = lr
 
 def get_output_directory(args):
-    output_directory = os.path.join('results',
+    if(args.sparsifier == 'statsam'):    
+        output_directory = os.path.join('results',
+            '{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}.varFocus={}.varScale={}.pixx={}.pixy={}'.
+            format(args.data, args.sparsifier, args.num_samples, args.modality, \
+                args.arch, args.decoder, args.criterion, args.lr, args.batch_size, \
+                args.pretrained, args.varFocus, args.varScale, args.pixx, args.pixy))
+    else:
+        output_directory = os.path.join('results',
         '{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}.varFocus={}.varScale={}'.
         format(args.data, args.sparsifier, args.num_samples, args.modality, \
             args.arch, args.decoder, args.criterion, args.lr, args.batch_size, \
