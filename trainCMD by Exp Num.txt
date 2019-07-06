@@ -1,0 +1,63 @@
+Referencing experiment numbers from 'Key Paper Sections'
+
+default 
+python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --sparsifier statsam --variable-focal --variable-scale --data nyudepthv2
+
+NYU
+1 python3 main.py -a resnet50 -d upproj -m rgb -b 16 --data nyudepthv2
+2 python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --data nyudepthv2
+3 python3 main.py -a resnet50 -d upproj -m rgbd -s 1 -b 16 --data nyudepthv2
+4 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --data nyudepthv2
+5 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --data nyudepthv2
+6 python3 main.py -a resnet50 -d upproj -m rgb -b 16 --variable-focal --data nyudepthv2
+7 python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --variable-focal --data nyudepthv2
+8 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --variable-focal --data nyudepthv2
+
+CMD STACK 1:
+python3 main.py -a resnet50 -d upproj -m rgb -b 16 --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -s 1 -b 16 --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgb -b 16 --variable-focal --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --variable-focal --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --variable-focal --data nyudepthv2
+
+#Need to set variable depth group 1 in utils
+9 python3 main.py -a resnet50 -d upproj -m rgb -b 16 --variable-scale --data nyudepthv2 #Need to set variable depth group 1 in utils
+10 python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --variable-scale --data nyudepthv2
+11 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --variable-scale --data nyudepthv2
+#Need to set variable depth group 2 in utils
+12 python3 main.py -a resnet50 -d upproj -m rgb -b 16 --variable-scale --data nyudepthv2
+13 python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --variable-scale --data nyudepthv2
+14 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --variable-scale --data nyudepthv2
+
+15 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 192 --variable-scale --data nyudepthv2
+16 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 76 --pixy 164 --variable-scale --data nyudepthv2
+17 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 90 --pixy 120 --variable-scale --data nyudepthv2
+18 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 138 --pixy 120 --variable-scale --data nyudepthv2
+19 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 152 --pixy 164 --variable-scale --data nyudepthv2
+20 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 232 --variable-scale --data nyudepthv2
+21 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 38 --pixy 177 --variable-scale --data nyudepthv2
+22 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 67 --pixy 87 --variable-scale --data nyudepthv2
+23 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 161 --pixy 87 --variable-scale --data nyudepthv2
+24 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 190 --pixy 177 --variable-scale --data nyudepthv2
+25 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 152 --variable-scale --data nyudepthv2
+
+CMD STACK:
+python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 192 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 76 --pixy 164 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 90 --pixy 120 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 138 --pixy 120 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 152 --pixy 164 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 232 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 38 --pixy 177 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 67 --pixy 87 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 161 --pixy 87 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 190 --pixy 177 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 152 --variable-scale --data nyudepthv2
+
+Kitti
+NOTE: Kitti req change to resnet18, both architectures appear to be correct to the paper.
+
+
+
+TRC
+
+
+
+
+
+
+
+For 5 points spaced at radius 40 and 80 pix the locations in the 1/2 size image are
+x =
+
+  114.0000   75.9577   90.4886  137.5114  152.0423  114.0000   37.9155   66.9772  161.0228  190.0845
+
+y =
+
+  192.0000  164.3607  119.6393  119.6393  164.3607  232.0000  176.7214   87.2786   87.2786  176.7214

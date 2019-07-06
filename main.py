@@ -10,7 +10,7 @@ cudnn.benchmark = True
 
 from models import ResNet
 from metrics import AverageMeter, Result
-from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling
+from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling
 import criteria
 import utils
 
@@ -41,7 +41,9 @@ def create_data_loaders(args):
     elif args.sparsifier == StaticSampling.name:
         sparsifier = StaticSampling(pixx=args.pixx, pixy=args.pixy)
     elif args.sparsifier == ProjectiveSampling.name:
-        sparsifier = ProjectiveSampling(pixx=args.pixx, pixy=args.pixy)
+        sparsifier = ProjectiveSampling()
+    elif args.sparsifier == NearestSampling.name:
+        sparsifier = NearestSampling(pixx=args.pixx, pixy=args.pixy)
     else:
         print("Unknown sparsifier")
 
@@ -56,7 +58,6 @@ def create_data_loaders(args):
     elif args.data == 'kitti':
         from dataloaders.kitti_dataloader import KITTIDataset
         if not args.evaluate:
-            print("Kitti is not yet implemented")
             train_dataset = KITTIDataset(traindir, type='train',
                 modality=args.modality, sparsifier=sparsifier)
         val_dataset = KITTIDataset(valdir, type='val',

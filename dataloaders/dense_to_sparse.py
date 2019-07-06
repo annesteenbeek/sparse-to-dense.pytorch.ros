@@ -17,10 +17,8 @@ class DenseToSparse:
 
 class ProjectiveSampling(DenseToSparse):
     name = "projsam"
-    def __init__(self, pixx=114, pixy=152):
+    def __init__(self):
         DenseToSparse.__init__(self)
-        self.pixx = pixx
-        self.pixy = pixy
 
     def __repr__(self):
         return "%s{ns=%d,md=%f,pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixxy)
@@ -86,6 +84,35 @@ class StaticSampling(DenseToSparse):
         """
         mask = np.zeros((depth.shape), dtype=bool)
         mask[self.pixy,self.pixx] = True
+        return mask
+
+class NearestSampling(DenseToSparse):
+    name = "nearsam"
+    def __init__(self, pixx=114, pixy=152):
+        DenseToSparse.__init__(self)
+        self.pixx = pixx
+        self.pixy = pixy
+
+    def __repr__(self):
+        return "%s{pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixy)
+
+    def dense_to_sparse(self, rgb, depth):
+        """
+        Returns a boolean mask with 1 at the nearest depth pixel to [pixy,pixx] 
+        which is non zero, and zeros everywhere else
+        """
+        #The index of non zero points
+        nonZeros = np.nonzero(depth) 
+
+        #Squared distance from [pixx,pixy] to non zero elements
+        dists = (abs(nonZeros[0]-self.pixy))**2 + (abs(nonZeros[1]-self.pixx))**2
+        minDist = np.argmin(dists)
+
+        mask = np.zeros((depth.shape), dtype=bool)
+        pixy = nonZeros[0][minDist]
+        pixx = nonZeros[1][minDist]
+
+        mask[pixy,pixx] = True
         return mask
 
 class UniformSampling(DenseToSparse):

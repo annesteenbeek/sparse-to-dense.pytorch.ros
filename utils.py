@@ -15,8 +15,8 @@ def parse_command():
     model_names = ['resnet18', 'resnet50']
     loss_names = ['l1', 'l2']
     data_names = ['nyudepthv2', 'kitti']
-    from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling
-    sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling]]
+    from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling
+    sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling]]
     from models import Decoder
     decoder_names = Decoder.names
     from dataloaders.dataloader import MyDataloader
