@@ -44,11 +44,11 @@ class FPDataset(MyDataloader):
         # rgb_tensor = normalize_rgb(rgb_tensor)
         # rgb_np = normalize_np(rgb_np)
 
-        if self.modality != 'rgbd':
-            print("Error, flowerpower modality must be RGBD and the sparsifier will be set to statsam")
+        if self.modality == 'rgb':
+            input_np = rgb_np
+        elif self.modality == 'rgbd':
+            input_np = self.create_rgbd(rgb_np, depth_np, tof)
 
-        input_np = self.create_rgbd(rgb_np, depth_np, tof)
-        
         input_tensor = to_tensor(input_np)
         while input_tensor.dim() < 3:
             input_tensor = input_tensor.unsqueeze(0)
