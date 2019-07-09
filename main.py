@@ -63,16 +63,18 @@ def create_data_loaders(args):
         val_dataset = KITTIDataset(valdir, type='val',
             modality=args.modality, sparsifier=sparsifier)
 
-    elif args.data == 'flowerpower':
-        from dataloaders.flowerpower_dataloader import FPDataset
+    elif args.data == 'tof':
+        traindir = os.path.join('data', args.tofType, 'train')
+        valdir = os.path.join('data', args.tofType, 'val')
+        from dataloaders.tof_dataloader import TOFDataset
         if not args.evaluate:
-            train_dataset = FPDataset(traindir, type='train',
+            train_dataset = TOFDataset(traindir, type='train',
                 modality=args.modality, sparsifier=StaticSampling(), augArgs=args)
-        val_dataset = FPDataset(valdir, type='val',
+        val_dataset = TOFDataset(valdir, type='val',
             modality=args.modality, sparsifier=StaticSampling(), augArgs=args)
     else:
         raise RuntimeError('Dataset not found.' +
-                           'The dataset must be either of nyudepthv2 or kitti or flowerpower.')
+                           'The dataset must be either of nyudepthv2 or kitti or tof.')
 
     # set batch size to be 1 for validation
     val_loader = torch.utils.data.DataLoader(val_dataset,
@@ -109,7 +111,21 @@ def main():
         args.evaluate = True
         validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
         return
-
+    elif args.crossEval:
+        print("Testing loaded model on current input parameters")
+        assert os.path.isfile(args.crossEval), \
+        "=> no best model found at '{}'".format(args.crossEval)
+        print("=> loading best model '{}'".format(args.crossEval))
+        checkpoint = torch.load(args.crossEval)
+        output_directory = os.path.dirname(args.crossEval)
+        start_epoch = checkpoint['epoch'] + 1
+        best_result = checkpoint['best_result']
+        model = checkpoint['model']
+        print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
+        _, val_loader = create_data_loaders(args)
+        args.evaluate = True
+        validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
+        return
     # optionally resume from a checkpoint
     elif args.resume:
         chkpt_path = args.resume

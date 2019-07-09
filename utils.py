@@ -17,7 +17,8 @@ def parse_command():
 
     model_names = ['resnet18', 'resnet50']
     loss_names = ['l1', 'l2']
-    data_names = ['nyudepthv2', 'kitti', 'flowerpower']
+    data_names = ['nyudepthv2', 'kitti', 'tof']
+    tof_names = ['flowerpower', 'trcnarrow', 'trcstandard', 'trcwide']
     from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling
     sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling]]
     from models import Decoder
@@ -73,10 +74,15 @@ def parse_command():
                         metavar='N', help='print frequency (default: 10)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
+    parser.add_argument('--crossEval', dest='crossEval', type=str, default='',
+                        help='evaluate model using current input parameters')
     parser.add_argument('-e', '--evaluate', dest='evaluate', type=str, default='',
                         help='evaluate model on validation set')
     parser.add_argument('--no-pretrain', dest='pretrained', action='store_false',
                         help='not to use ImageNet pre-trained weights')
+    parser.add_argument('--tofType', metavar='TOFTYPE', default='flowerpower',
+                        choices=tof_names,
+                        help='dataset type when using data=tof: ' + ' | '.join(tof_names) + ' (default: flowerpower)')
     parser.set_defaults(pretrained=True)
     args = parser.parse_args()
     if args.modality == 'rgb' and args.num_samples != 0:
@@ -111,7 +117,13 @@ def adjust_learning_rate(optimizer, epoch, lr_init):
         param_group['lr'] = lr
 
 def get_output_directory(args):
-    if(args.sparsifier == 'statsam'):    
+    if(args.data == 'tof'):
+        output_directory = os.path.join('results',
+            '{}.{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}.varFocus={}.varScale={}.pixx={}.pixy={}'.
+            format(args.data, args.tofType, args.sparsifier, args.num_samples, args.modality, \
+                args.arch, args.decoder, args.criterion, args.lr, args.batch_size, \
+                args.pretrained, args.varFocus, args.varScale, args.pixx, args.pixy))
+    elif(args.sparsifier == 'statsam'):    
         output_directory = os.path.join('results',
             '{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}.varFocus={}.varScale={}.pixx={}.pixy={}'.
             format(args.data, args.sparsifier, args.num_samples, args.modality, \

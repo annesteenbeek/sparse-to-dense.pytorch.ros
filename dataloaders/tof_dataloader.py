@@ -15,9 +15,9 @@ def h5_tof_loader(path):
 
 to_tensor = transforms.ToTensor()
 
-class FPDataset(MyDataloader):
+class TOFDataset(MyDataloader):
     def __init__(self, root, type, sparsifier=None, modality='rgb', augArgs=None, loader=h5_tof_loader):
-        super(FPDataset, self).__init__(root, type, sparsifier, modality, augArgs, loader)
+        super(TOFDataset, self).__init__(root, type, sparsifier, modality, augArgs, loader)
         self.output_size = (228, 304)
 
     def __getraw__(self, index):
