@@ -9,9 +9,12 @@ cmap = plt.cm.viridis
 
 def parse_command():
     #Set the depth groups as a tuple here if using --variable-scale
-    scaleMeans = (0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5)
-    scaleVariances = (0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
-    
+    #scaleMeans = (0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5)
+    #scaleVariances = (0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+
+    scaleMeans = (0.1,1.0,1.5)
+    scaleVariances = (0.0,0.0,0.0)
+
     model_names = ['resnet18', 'resnet50']
     loss_names = ['l1', 'l2']
     data_names = ['nyudepthv2', 'kitti']

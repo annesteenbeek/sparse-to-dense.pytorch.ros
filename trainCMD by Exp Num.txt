@@ -16,11 +16,11 @@ NYU
 CMD STACK 1:
 python3 main.py -a resnet50 -d upproj -m rgb -b 16 --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -s 1 -b 16 --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgb -b 16 --variable-focal --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --variable-focal --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --variable-focal --data nyudepthv2
 
-#Need to set variable depth group 1 in utils
+#Need to set variable depth group 1 in utils (0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5)
 9 python3 main.py -a resnet50 -d upproj -m rgb -b 16 --variable-scale --data nyudepthv2 #Need to set variable depth group 1 in utils
 10 python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --variable-scale --data nyudepthv2
 11 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --variable-scale --data nyudepthv2
-#Need to set variable depth group 2 in utils
+#Need to set variable depth group 2 in utils (0.1,1.0,1.5)
 12 python3 main.py -a resnet50 -d upproj -m rgb -b 16 --variable-scale --data nyudepthv2
 13 python3 main.py -a resnet50 -d upproj -m rgbd -s 100 -b 16 --variable-scale --data nyudepthv2
 14 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier projsam --variable-scale --data nyudepthv2
@@ -40,8 +40,19 @@ python3 main.py -a resnet50 -d upproj -m rgb -b 16 --data nyudepthv2 && python3 
 CMD STACK:
 python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 192 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 76 --pixy 164 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 90 --pixy 120 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 138 --pixy 120 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 152 --pixy 164 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 232 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 38 --pixy 177 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 67 --pixy 87 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 161 --pixy 87 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 190 --pixy 177 --variable-scale --data nyudepthv2 && python3 main.py -a resnet50 -d upproj -m rgbd -b 16 --sparsifier statsam --pixx 114 --pixy 152 --variable-scale --data nyudepthv2
 
+
+
 Kitti
 NOTE: Kitti req change to resnet18, both architectures appear to be correct to the paper.
+50 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --data kitti
+51 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --data kitti
+52 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-focal --data kitti
+53 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --variable-focal --data kitti
+54 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-scale --data kitti
+55 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --variable-scale --data kitti
+
+CMD STACK:
+python3 main.py -a resnet18 -d upproj -m rgb -b 16 --data kitti && python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --data kitti && python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-focal --data kitti && python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --variable-focal --data kitti && python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-scale --data kitti && python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --variable-scale --data kitti
 
 
 
