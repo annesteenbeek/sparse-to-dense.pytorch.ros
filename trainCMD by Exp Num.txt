@@ -65,17 +65,14 @@ TRC
 65 python3 main.py -a resnet50 -d upproj -m rgbd -b 3 --epochs 50 --data tof --tofType trcnarrow
 
 CMD STACK:
-python3 main.py -a resnet50 -d upproj -m rgbd -b 3 --epochs 50 --data tof --tofType trcstandard && python3 main.py -a resnet50 -d upproj -m rgb -b 3 --epochs 50 --data tof --tofType trcstandard && python3 main.py -a resnet50 -d upproj -m rgbd -b 3 --epochs 50 --data tof --tofType trcwide && python3 main.py -a resnet50 -d upproj -m rgb -b 3 --epochs 50 --data tof --tofType trcwide
+python3 main.py -a resnet50 -d upproj -m rgbd -b 3 --epochs 50 --data tof --tofType trcwide && python3 main.py -a resnet50 -d upproj -m rgb -b 3 --epochs 50 --data tof --tofType trcwide
 
 
 
 FP
 70 python3 main.py -a resnet50 -d upproj -m rgb -b 3 --epochs 50 --data flowerpower
 71 python3 main.py -a resnet50 -d upproj -m rgbd -b 3 --epochs 50 --data flowerpower
-72 if cross testing works
-73 
-74
-75
+
 
 
 
