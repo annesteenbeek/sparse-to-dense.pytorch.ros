@@ -63,9 +63,16 @@ def create_data_loaders(args):
         val_dataset = KITTIDataset(valdir, type='val',
             modality=args.modality, sparsifier=sparsifier)
 
+    elif args.data == 'flowerpower':
+        from dataloaders.flowerpower_dataloader import FPDataset
+        if not args.evaluate:
+            train_dataset = FPDataset(traindir, type='train',
+                modality=args.modality, sparsifier=StaticSampling(), augArgs=args)
+        val_dataset = FPDataset(valdir, type='val',
+            modality=args.modality, sparsifier=StaticSampling(), augArgs=args)
     else:
         raise RuntimeError('Dataset not found.' +
-                           'The dataset must be either of nyudepthv2 or kitti.')
+                           'The dataset must be either of nyudepthv2 or kitti or flowerpower.')
 
     # set batch size to be 1 for validation
     val_loader = torch.utils.data.DataLoader(val_dataset,
