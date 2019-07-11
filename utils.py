@@ -74,8 +74,8 @@ def parse_command():
                         metavar='N', help='print frequency (default: 10)')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
                         help='path to latest checkpoint (default: none)')
-    parser.add_argument('--crossEval', dest='crossEval', type=str, default='',
-                        help='evaluate model using current input parameters')
+    parser.add_argument('--crossTrain', dest='crossTrain', type=str, default='',
+                        help='train old model using current input parameters, put the model path here')
     parser.add_argument('-e', '--evaluate', dest='evaluate', type=str, default='',
                         help='evaluate model on validation set')
     parser.add_argument('--no-pretrain', dest='pretrained', action='store_false',

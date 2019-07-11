@@ -111,21 +111,15 @@ def main():
         args.evaluate = True
         validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
         return
-    elif args.crossEval:
-        print("Testing loaded model on current input parameters")
-        assert os.path.isfile(args.crossEval), \
-        "=> no best model found at '{}'".format(args.crossEval)
-        print("=> loading best model '{}'".format(args.crossEval))
-        checkpoint = torch.load(args.crossEval)
-        output_directory = os.path.dirname(args.crossEval)
-        start_epoch = checkpoint['epoch'] + 1
-        best_result = checkpoint['best_result']
+    elif args.crossTrain:
+        print("Retraining loaded model on current input parameters")
+        train_loader, val_loader = create_data_loaders(args)
+        checkpoint = torch.load(args.crossTrain)
         model = checkpoint['model']
-        print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
-        _, val_loader = create_data_loaders(args)
-        args.evaluate = True
-        validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
-        return
+        optimizer = torch.optim.SGD(model.parameters(), args.lr, \
+            momentum=args.momentum, weight_decay=args.weight_decay)
+        model = model.cuda()
+
     # optionally resume from a checkpoint
     elif args.resume:
         chkpt_path = args.resume
