@@ -45,7 +45,7 @@ class KITTIDataset(MyDataloader):
     def val_transform(self, rgb, depth):
         s = self.getFocalScale()
 
-        depth = np.asfarray(depth_np, dtype='float32') #This used to be the last step, not sure if it goes here?
+        depth = np.asfarray(depth, dtype='float32') #This used to be the last step, not sure if it goes here?
         if(self.augArgs.varScale): #Variable global scale simulation
             scale = self.getDepthGroup()
             depth_np = depth*scale
