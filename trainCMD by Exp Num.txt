@@ -51,6 +51,15 @@ Kitti
 NOTE: Kitti req change to resnet18, both architectures appear to be correct to the paper.
 NOTE: Should set --pixx 456 --pixy 114 to sample middle of image
 50 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --data kitti
+51 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --data kitti
+52 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-focal --data kitti
+53 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --variable-focal --data kitti
+54 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-scale --data kitti
+55 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --variable-scale --data kitti
+
+%%%%%%%%
+THESE ARE THE OLD BUGGED COMMANDS, ONLY FOR REFERENCE
+50 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --data kitti
 51 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --data kitti
 52 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-focal --data kitti
 53 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --variable-focal --data kitti
@@ -60,7 +69,7 @@ With Pixx and Pixy set properly
 56 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --variable-scale --data kitti
 57 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --variable-focal --data kitti
 58 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --data kitti
-
+%%%%%%%%
 CMD STACK:
 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --data kitti && python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --data kitti && python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-focal --data kitti && python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --variable-focal --data kitti && python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-scale --data kitti && python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --variable-scale --data kitti
 

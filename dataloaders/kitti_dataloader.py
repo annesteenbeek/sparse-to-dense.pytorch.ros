@@ -3,8 +3,8 @@ import dataloaders.transforms as transforms
 from dataloaders.dataloader import MyDataloader
 
 class KITTIDataset(MyDataloader):
-    def __init__(self, root, type, sparsifier=None, modality='rgb'):
-        super(KITTIDataset, self).__init__(root, type, sparsifier, modality)
+    def __init__(self, root, type, sparsifier=None, modality='rgb', augArgs=None):
+        super(KITTIDataset, self).__init__(root, type, sparsifier, modality, augArgs)
         self.output_size = (228, 912)
 
     def train_transform(self, rgb, depth):
