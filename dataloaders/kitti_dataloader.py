@@ -8,8 +8,19 @@ class KITTIDataset(MyDataloader):
         self.output_size = (228, 912)
 
     def train_transform(self, rgb, depth):
-        s = np.random.uniform(1.0, 1.5)  # random scaling
-        depth_np = depth / s
+        #s = np.random.uniform(1.0, 1.5)  # random scaling
+        #depth_np = depth / s
+        s = self.getFocalScale()
+
+        if(self.augArgs.varFocus): #Variable focal length simulation
+            depth_np = depth
+        else:
+            depth_np = depth / s #Correct for focal length
+
+        if(self.augArgs.varScale): #Variable global scale simulation
+            scale = self.getDepthGroup()
+            depth_np = depth_np*scale        
+
         angle = np.random.uniform(-5.0, 5.0)  # random rotation degrees
         do_flip = np.random.uniform(0.0, 1.0) < 0.5  # random horizontal flip
 
@@ -32,15 +43,29 @@ class KITTIDataset(MyDataloader):
         return rgb_np, depth_np
 
     def val_transform(self, rgb, depth):
-        depth_np = depth
-        transform = transforms.Compose([
-            transforms.Crop(130, 10, 240, 1200),
-            transforms.CenterCrop(self.output_size),
-        ])
+        s = self.getFocalScale()
+
+        depth = np.asfarray(depth_np, dtype='float32') #This used to be the last step, not sure if it goes here?
+        if(self.augArgs.varScale): #Variable global scale simulation
+            scale = self.getDepthGroup()
+            depth_np = depth*scale
+        else:
+            depth_np = depth
+
+        if(self.augArgs.varFocus):
+            transform = transforms.Compose([
+                transforms.Crop(130, 10, 240, 1200),
+                transforms.Resize(s), #Resize both images without correcting the depth values
+                transforms.CenterCrop(self.output_size),
+            ])
+        else:
+            transform = transforms.Compose([
+                transforms.Crop(130, 10, 240, 1200),
+                transforms.CenterCrop(self.output_size),
+            ])
+
         rgb_np = transform(rgb)
         rgb_np = np.asfarray(rgb_np, dtype='float') / 255
-        depth_np = np.asfarray(depth_np, dtype='float32')
         depth_np = transform(depth_np)
-
         return rgb_np, depth_np
 
