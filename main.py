@@ -59,9 +59,9 @@ def create_data_loaders(args):
         from dataloaders.kitti_dataloader import KITTIDataset
         if not args.evaluate:
             train_dataset = KITTIDataset(traindir, type='train',
-                modality=args.modality, sparsifier=sparsifier)
+                modality=args.modality, sparsifier=sparsifier, augArgs=args)
         val_dataset = KITTIDataset(valdir, type='val',
-            modality=args.modality, sparsifier=sparsifier)
+            modality=args.modality, sparsifier=sparsifier, augArgs=args)
 
     elif args.data == 'tof':
         traindir = os.path.join('data', args.tofType, 'train')
