@@ -56,6 +56,8 @@ NOTE: Should set --pixx 456 --pixy 114 to sample middle of image
 53 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --variable-focal --data kitti
 54 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-scale --data kitti
 55 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --variable-scale --data kitti
+56 python3 main.py -a resnet18 -d upproj -m rgb -b 16 --variable-scale --variable-focal --data kitti
+57 python3 main.py -a resnet18 -d upproj -m rgbd -b 16 --sparsifier nearsam --pixx 456 --pixy 114 --variable-scale --variable-focal --data kitti
 
 %%%%%%%%
 THESE ARE THE OLD BUGGED COMMANDS, ONLY FOR REFERENCE
