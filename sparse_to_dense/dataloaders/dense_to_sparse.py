@@ -115,6 +115,61 @@ class NearestSampling(DenseToSparse):
         mask[pixy,pixx] = True
         return mask
 
+class ORBSampling(DenseToSparse):
+    name = "orb"
+
+    def __init__(self, num_samples, max_depth=np.inf, apply_kinect_noise=False):
+        DenseToSparse.__init__(self, apply_kinect_noise)
+        self.num_samples = num_samples
+        self.max_depth = max_depth
+        self.orb_lock = Lock()
+        self.orb = cv2.ORB_create(edgeThreshold=15, patchSize=31, nlevels=8, fastThreshold=20, scaleFactor=1.2, WTA_K=2,scoreType=cv2.ORB_HARRIS_SCORE, firstLevel=0, nfeatures=500)
+        self.n_success = 0
+        self.n_failed = 0
+
+
+    def __repr__(self):
+        return "%s{ns=%d,md=%.4f}" % (self.name, self.num_samples,
+                                      self.max_depth)
+
+    def depth_mask(self, rgb, depth):
+        """
+        Use ORB descriptor to determine depth points 
+       """
+        depth_mask = np.zeros_like(depth, dtype=np.bool)
+        # return depth_mask
+        _rgb = (rgb*255.0).astype('uint8')
+
+        # self.orb_lock.acquire()
+        # gray = rgb2grayscale(rgb)
+        kps = self.orb.detect(_rgb)
+
+        if len(kps) == 0:
+            self.n_failed += 1
+        else:
+            self.n_success += 1
+            # img2 = cv2.drawKeypoints(_rgb,kps,None,color=(0,255,0), flags=0)
+            # plt.imshow(img2),plt.show()
+        # print("ORB failed %d times, succeeded %d times" % (self.n_failed, self.n_success))
+        # self.orb_lock.release()
+
+        # TODO: randomize keypoints for better training
+        # TODO: ORB slam provides around 100 points randomize exact number
+        # TODO: add noise on depth estimates
+        samples = 0
+        for kp in kps:
+            c,r = int(kp.pt[0]), int(kp.pt[1])
+            if depth[r,c] != 0.0 and depth[r,c] <= self.max_depth:
+                depth_mask[r,c] = True
+                samples+=1
+                if samples == self.num_samples:
+                    break
+        # if samples < self.num_samples:
+        #     print("Less then required samples: %d/%d, %d available" % (samples, self.num_samples, len(kps)))
+        #     print("ORB failed %d times, succeeded %d times" % (self.n_failed, self.n_success))
+        return depth_mask
+
+
 class UniformSampling(DenseToSparse):
     name = "uar"
     def __init__(self, num_samples, max_depth=np.inf):
