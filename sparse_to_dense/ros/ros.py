@@ -7,7 +7,7 @@ import ros_numpy
 import torch
 import numpy as np
 import skimage.transform as transform
-import transforms
+import dataloaders.transforms as transforms
 import tf
 from metrics import AverageMeter, Result
 from scipy import ndimage

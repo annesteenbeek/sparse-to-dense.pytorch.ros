@@ -83,8 +83,11 @@ def parse_command():
     parser.add_argument('--tofType', metavar='TOFTYPE', default='flowerpower',
                         choices=tof_names,
                         help='dataset type when using data=tof: ' + ' | '.join(tof_names) + ' (default: flowerpower)')
+    parser.add_argument('-r', '--ros', action='store_true',
+                        default=False, help='Start module as ROS node.')
+
     parser.set_defaults(pretrained=True)
-    args = parser.parse_args()
+    args, unknown = parser.parse_known_args()
     if args.modality == 'rgb' and args.num_samples != 0:
         print("number of samples is forced to be 0 when input modality is rgb")
         args.num_samples = 0

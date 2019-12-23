@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import os
 import time
 import csv
@@ -96,6 +98,28 @@ def main():
 
     # evaluation mode
     start_epoch = 0
+    if args.ros:
+        # import ros objects later to avoid ros dependencies
+        import rospy
+        from ros.ros import ROSNode 
+
+        rospy.init_node('sparse_to_dense')
+        best_model_filename = rospy.get_param("~model_path")
+
+        assert os.path.isfile(best_model_filename), \
+        "=> no best model found at '{}'".format(best_model_filename)
+        print("=> loading best model '{}'".format(best_model_filename))
+        checkpoint = torch.load(best_model_filename)
+        args = checkpoint['args']
+        start_epoch = checkpoint['epoch'] + 1
+        best_result = checkpoint['best_result']
+        model = checkpoint['model']
+        print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
+
+        rosnode = ROSNode(model)
+        rosnode.run()
+        return
+ 
     if args.evaluate:
         assert os.path.isfile(args.evaluate), \
         "=> no best model found at '{}'".format(args.evaluate)
