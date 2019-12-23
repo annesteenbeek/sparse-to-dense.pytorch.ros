@@ -1,0 +1,12 @@
+<launch>
+
+    <node name="sparse_to_dense" pkg="sparse_to_dense" type="main.py" output="screen" required="true" 
+      args="-a resnet18 -d deconv3 -m rgb -s 100 --ros">
+
+        <param name="model_path" value="$(find sparse_to_dense)/results/nyudepthv2.sparsifier=uar{ns=100,md=inf}.modality=rgbd.arch=resnet18.decoder=deconv3.criterion=l1.lr=0.01.bs=8/model_best.pth.tar" />
+        <param name="rate" value="10" />
+        <remap from="rgb_in" to="/camera/rgb/image_color" />
+        <remap from="depth_target" to="/camera/depth/image" />
+    </node>
+
+</launch>
