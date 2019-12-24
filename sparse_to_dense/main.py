@@ -74,9 +74,21 @@ def create_data_loaders(args):
                 modality=args.modality, sparsifier=StaticSampling(), augArgs=args)
         val_dataset = TOFDataset(valdir, type='val',
             modality=args.modality, sparsifier=StaticSampling(), augArgs=args)
+    elif args.data == 'tum':
+        print("using tum dataset")
+        global output_directory
+
+        if not args.evaluate:
+            raise RuntimeError('TUM dataset only used for evaluation')
+        from dataloaders.tum_dataloader import TUMDataset
+        room = 'rgbd_dataset_freiburg1_room'
+        # room = 'rgbd_dataset_freiburg3_long_office_household'
+        valdir = os.path.join('data', args.data, room)
+        val_dataset = TUMDataset(valdir, type='val', 
+            modality=args.modality, sparsifier=sparsifier, augArgs=args)
     else:
         raise RuntimeError('Dataset not found.' +
-                           'The dataset must be either of nyudepthv2 or kitti or tof.')
+                           'The dataset must be either of nyudepthv2 or kitti or tof or tum.')
 
     # set batch size to be 1 for validation
     val_loader = torch.utils.data.DataLoader(val_dataset,
@@ -126,13 +138,19 @@ def main():
         print("=> loading best model '{}'".format(args.evaluate))
         checkpoint = torch.load(args.evaluate)
         output_directory = os.path.dirname(args.evaluate)
+        # TMP
+        if args.data == "tum": # tum only used for evaluation
+            output_directory = os.path.join(output_directory, "tum")
+            do_tum = True
         args = checkpoint['args']
         start_epoch = checkpoint['epoch'] + 1
         best_result = checkpoint['best_result']
         model = checkpoint['model']
         print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
-        _, val_loader = create_data_loaders(args)
+        if do_tum:
+            args.data = "tum"
         args.evaluate = True
+        _, val_loader = create_data_loaders(args)
         validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
         return
     elif args.crossTrain:
