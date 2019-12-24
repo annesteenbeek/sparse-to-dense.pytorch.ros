@@ -1,14 +1,12 @@
 import os
 import shutil
-import rospy
-import message_filters
 import threading
 import ros_numpy
 import torch
 import numpy as np
 import skimage.transform as transform
 import dataloaders.transforms as transforms
-import tf
+from dataloaders.dense_to_sparse import UniformSampling
 from metrics import AverageMeter, Result
 from scipy import ndimage
 from PIL import Image as PILImage
@@ -17,7 +15,10 @@ from scipy.spatial import ConvexHull
 
 
 # ROS imports
+import rospy
 import tf2_ros
+import tf
+import message_filters
 from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge, CvBridgeError
 from sparse_to_dense.msg import Result as ResultMsg
@@ -95,8 +96,7 @@ def val_transform(img_msg, oheight, owidth):
 
     # perform 1st part of data augmentation
     transform = transforms.Compose([
-        transforms.CenterCrop((228*2, 304*2)),  # 480-24
-        transforms.Resize(float(oheight) / (228*2)),
+        transforms.Resize(240.0/480),
         transforms.CenterCrop((oheight, owidth)),
     ])
     img_np = transform(img_cv)
@@ -142,6 +142,7 @@ def region_mask(sparse_depth):
         return mask 
 
 class FrameSaver(object):
+    # Used to collect frames for 3D reconstruction in post processing
 
     def __init__(self, prefix, enabled=True):
         self.enabled = enabled
@@ -184,51 +185,22 @@ class FrameSaver(object):
         self.labels.close()
         print("Saved frames in {}".format(self.foldername))
 
-class TrajectorySaver(object):
-
-    def __init__(self, enabled=True):
-        self.enabled = enabled
-        self.filename = "ScaledKeyFrameTrajectory.txt"
-
-        self.positions = []
-
-    def add_position(self, translation, quaternion, timestamp):
-        if not self.enabled:
-            return
-
-        time_str = "%.6f" % timestamp.to_sec()
-        pos_str = "{time} {t[0]:.7f} {t[1]:.7f} {t[2]:.7f} {q[0]:.7f} {q[1]:.7f} {q[2]:.7f} {q[3]:.7f}\n".format(
-                    time=time_str, q=quaternion, t=translation
-                    )
-        self.positions.append(pos_str)
-
-    def save(self):
-        if not self.enabled:
-            return
-
-        file = open("{}".format(self.filename), "w+")
-        for position in self.positions:
-            file.write(position)
-        file.close()
-
-        print("Saved scaled trajectory as: %s" % self.filename)
-        
-
- 
 class ROSNode(object):
 
-    def __init__(self, model, sparsifier=None, oheight=228, owidth=304):
+    def __init__(self, model, oheight=228, owidth=304):
         self.model = model
-        self.sparsifier = sparsifier
+
+
         self.oheight = oheight
         self.owidth = owidth
+
+        self.sparsifier = UniformSampling(num_samples=100, max_depth=5.0)
 
         self.model.eval()
         self.img_lock = threading.Lock()
 
         self.est_frame_saver = FrameSaver(prefix="est", enabled=True)
         self.rgb_frame_saver = FrameSaver(prefix="rgb_est", enabled=True)
-        self.traj_saver = TrajectorySaver(enabled=True)
 
         target_topic = rospy.get_param("~target_topic", "")
         self.emulate_sparse_depth = rospy.get_param("~emulate_sparse_depth", False)
@@ -301,8 +273,6 @@ class ROSNode(object):
                                         self.frame,
                                         'world')
 
-            # self.traj_saver.add_position(scaled_translation, quaternion, time)
-
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as ex:
             rospy.logerr("TF error: {0}".format(ex))
 
@@ -333,7 +303,6 @@ class ROSNode(object):
 
             pred_msg = ros_numpy.msgify(Image, depth_filtered, encoding=depth_msg.encoding)
             sparse_debug_msg = ros_numpy.msgify(Image, sparse_debug, encoding=depth_msg.encoding)
-            # sparse_debug_msg = depth_msg
 
 
             image_frame = header.frame_id
@@ -377,15 +346,10 @@ class ROSNode(object):
             # self.rate.sleep()
             self.img_lock.release()
 
-    def create_sparse_depth(self, rgb, depth):
-        if self.sparsifier is None:
-            return depth
-        else:
-            seed = 131732859  # Tim's favorite random number
-            return self.sparsifier.dense_to_sparse(rgb, depth, seed)
-
     def create_rgbd(self, rgb, depth):
-        sparse_depth = self.create_sparse_depth(rgb, depth)
+        mask_keep = self.sparsifier.dense_to_sparse(rgb, depth)
+        sparse_depth = np.zeros(depth.shape)
+        sparse_depth[mask_keep] = depth[mask_keep]
         rgbd = np.append(rgb, np.expand_dims(sparse_depth, axis=2), axis=2)
         return rgbd
 
@@ -568,7 +532,6 @@ class ROSNode(object):
         rospy.spin()
         self.est_frame_saver.close()
         self.rgb_frame_saver.close()
-        # self.traj_saver.save()
         return
 
 

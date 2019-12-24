@@ -29,11 +29,19 @@ class Result(object):
         self.data_time, self.gpu_time = data_time, gpu_time
 
     def evaluate(self, output, target):
+        if target.is_cuda:
+            target = target.cpu()
+        if output.is_cuda:
+            output = output.cpu()
+
         valid_mask = target>0
         output = output[valid_mask]
         target = target[valid_mask]
 
-        abs_diff = (output - target).abs()
+        if np.count_nonzero(valid_mask.cpu()) > 0:
+            abs_diff = (output - target).abs()
+        else:
+            return
 
         self.mse = float((torch.pow(abs_diff, 2)).mean())
         self.rmse = math.sqrt(self.mse)

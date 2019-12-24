@@ -99,45 +99,45 @@ class UpConv(Decoder):
         self.layer3 = self.upconv_module(in_channels//4)
         self.layer4 = self.upconv_module(in_channels//8)
 
+class UpProjModule(nn.Module):
+    # UpProj module has two branches, with a Unpool at the start and a ReLu at the end
+    #   upper branch: 5*5 conv -> batchnorm -> ReLU -> 3*3 conv -> batchnorm
+    #   bottom branch: 5*5 conv -> batchnorm
+
+    def __init__(self, in_channels):
+        super(UpProjModule, self).__init__()
+        out_channels = in_channels//2
+        self.unpool = Unpool(in_channels)
+        self.upper_branch = nn.Sequential(collections.OrderedDict([
+            ('conv1',      nn.Conv2d(in_channels,out_channels,kernel_size=5,stride=1,padding=2,bias=False)),
+            ('batchnorm1', nn.BatchNorm2d(out_channels)),
+            ('relu',      nn.ReLU()),
+            ('conv2',      nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=1,padding=1,bias=False)),
+            ('batchnorm2', nn.BatchNorm2d(out_channels)),
+        ]))
+        self.bottom_branch = nn.Sequential(collections.OrderedDict([
+            ('conv',      nn.Conv2d(in_channels,out_channels,kernel_size=5,stride=1,padding=2,bias=False)),
+            ('batchnorm', nn.BatchNorm2d(out_channels)),
+        ]))
+        self.relu = nn.ReLU()
+
+    def forward(self, x):
+        x = self.unpool(x)
+        x1 = self.upper_branch(x)
+        x2 = self.bottom_branch(x)
+        x = x1 + x2
+        x = self.relu(x)
+        return x
+
 class UpProj(Decoder):
     # UpProj decoder consists of 4 upproj modules with decreasing number of channels and increasing feature map size
 
-    class UpProjModule(nn.Module):
-        # UpProj module has two branches, with a Unpool at the start and a ReLu at the end
-        #   upper branch: 5*5 conv -> batchnorm -> ReLU -> 3*3 conv -> batchnorm
-        #   bottom branch: 5*5 conv -> batchnorm
-
-        def __init__(self, in_channels):
-            super(UpProj.UpProjModule, self).__init__()
-            out_channels = in_channels//2
-            self.unpool = Unpool(in_channels)
-            self.upper_branch = nn.Sequential(collections.OrderedDict([
-              ('conv1',      nn.Conv2d(in_channels,out_channels,kernel_size=5,stride=1,padding=2,bias=False)),
-              ('batchnorm1', nn.BatchNorm2d(out_channels)),
-              ('relu',      nn.ReLU()),
-              ('conv2',      nn.Conv2d(out_channels,out_channels,kernel_size=3,stride=1,padding=1,bias=False)),
-              ('batchnorm2', nn.BatchNorm2d(out_channels)),
-            ]))
-            self.bottom_branch = nn.Sequential(collections.OrderedDict([
-              ('conv',      nn.Conv2d(in_channels,out_channels,kernel_size=5,stride=1,padding=2,bias=False)),
-              ('batchnorm', nn.BatchNorm2d(out_channels)),
-            ]))
-            self.relu = nn.ReLU()
-
-        def forward(self, x):
-            x = self.unpool(x)
-            x1 = self.upper_branch(x)
-            x2 = self.bottom_branch(x)
-            x = x1 + x2
-            x = self.relu(x)
-            return x
-
     def __init__(self, in_channels):
         super(UpProj, self).__init__()
-        self.layer1 = self.UpProjModule(in_channels)
-        self.layer2 = self.UpProjModule(in_channels//2)
-        self.layer3 = self.UpProjModule(in_channels//4)
-        self.layer4 = self.UpProjModule(in_channels//8)
+        self.layer1 = UpProjModule(in_channels)
+        self.layer2 = UpProjModule(in_channels//2)
+        self.layer3 = UpProjModule(in_channels//4)
+        self.layer4 = UpProjModule(in_channels//8)
 
 def choose_decoder(decoder, in_channels):
     # iheight, iwidth = 10, 8
