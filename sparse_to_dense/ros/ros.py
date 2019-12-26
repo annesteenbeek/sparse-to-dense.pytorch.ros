@@ -22,6 +22,7 @@ import message_filters
 from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge, CvBridgeError
 from sparse_to_dense.msg import Result as ResultMsg
+from sparse_to_dense.msg import SampleMetrics
 from sensor_msgs.msg import Image, CameraInfo
 from dynamic_reconfigure.server import Server
 from sparse_to_dense.cfg import SparseToDenseConfig 
@@ -44,6 +45,7 @@ def get_result_msg(result, count=1):
     msg.delta2 = result.delta2
     msg.delta3 = result.delta3
     msg.data_time = result.data_time
+    msg.margin10 = result.margin10
     msg.gpu_time = result.gpu_time
     msg.count = count
 
@@ -94,15 +96,37 @@ cvBridge = CvBridge()
 def val_transform(img_msg, oheight, owidth):
     img_cv = cvBridge.imgmsg_to_cv2(img_msg, desired_encoding="passthrough")
 
-    # perform 1st part of data augmentation
+    resize = 240.0/480
     transform = transforms.Compose([
-        transforms.Resize(240.0/480),
+        transforms.Resize(resize),
         transforms.CenterCrop((oheight, owidth)),
     ])
-    img_np = transform(img_cv)
 
-    if img_np.ndim == 3: # rgb images to floats
+    if img_cv.ndim == 2: # depth image
+        n_depth = np.count_nonzero(img_cv)
+        if n_depth < 1000: # if less then n points, must be sparse
+            # to prevent sparse point loss, dont use normal resize
+
+            def sparse_resize(img):
+                rb, cb = img_cv.shape # big
+                rs, cs = int(rb*resize), int(cb*resize) # small
+                sh = (rs, int(rb/rs), cs, int(cb/cs)) # new shape 
+                return img_cv.reshape(sh).max(-1).max(1)
+
+            transform = transforms.Compose([
+                sparse_resize,
+                transforms.CenterCrop((oheight, owidth)),
+            ])
+
+    img_np = transform(img_cv)
+    if img_cv.ndim == 3: # rgb images to floats
         img_np = np.asfarray(img_np, dtype='float') / 255
+    # else:
+    #     if n_depth < 1000:
+    #         n_new = np.count_nonzero(img_np)
+    #         print("Sparse point loss, before: {}, after: {}, loss: {} |".format(
+    #             n_depth, n_new, n_depth-n_new
+    #         ))
 
     return img_np
 
@@ -185,6 +209,47 @@ class FrameSaver(object):
         self.labels.close()
         print("Saved frames in {}".format(self.foldername))
 
+class SampleMetricsTracker(object):
+    def __init__(self):
+        self.metric_pub = rospy.Publisher('sample_metrics', SampleMetrics, queue_size=5)
+        self.samples = []
+        self.sum_mse, self.sum_rmse, self.sum_mae = 0, 0, 0
+        self.sum_stde = 0
+        self.count = 0
+
+    def evaluate(self, sparse_np, target_np):
+        self.count += 1
+        n_points = np.count_nonzero(sparse_np)
+        self.samples.append(n_points)
+
+        depth_valid = np.nonzero(sparse_np)
+        error = target_np[depth_valid] - sparse_np[depth_valid]
+        error = error[~np.isnan(error)]
+        abs_diff = np.absolute(error)
+        self.sum_mae += abs_diff.mean()
+        mse = (abs_diff**2).mean()
+        self.sum_mse += mse
+        self.sum_rmse += np.sqrt(mse)
+        self.sum_stde += np.std(error)
+
+        self.publish()
+
+    def publish(self):
+        msg = SampleMetrics()
+
+        msg.n_avg = np.mean(self.samples)
+        msg.min = min(self.samples)
+        msg.max = max(self.samples)
+        msg.stddev = np.std(self.samples)
+        msg.mse = self.sum_mse / self.count
+        msg.rmse = self.sum_rmse / self.count
+        msg.mae = self.sum_mae / self.count
+        msg.stde = self.sum_stde /self.count
+        msg.count = self.count
+
+        self.metric_pub.publish(msg)
+
+
 class ROSNode(object):
 
     def __init__(self, model, oheight=228, owidth=304):
@@ -214,6 +279,7 @@ class ROSNode(object):
         self.debug_cam_info_pub = rospy.Publisher('debug/camera_info', CameraInfo, queue_size=5)
         self.cam_info_pub = rospy.Publisher('camera_info', CameraInfo, queue_size=5)
         self.avg_res_pub = rospy.Publisher('average_results', ResultMsg, queue_size=5)
+        self.sample_metrics_tracker = SampleMetricsTracker()
 
         self.rgb_sub = message_filters.Subscriber('rgb_in', Image)
         self.sparse_sub = message_filters.Subscriber('depth_sparse', Image)
@@ -329,7 +395,8 @@ class ROSNode(object):
             if target_msg is not None:
                 target_np = val_transform(target_msg, self.oheight, self.owidth)
                 debug_target_msg = ros_numpy.msgify(Image, target_np, encoding=depth_msg.encoding)
-                debug_target_msg.header.stamp = target_msg.header.stamp
+                # debug_target_msg.header.stamp = target_msg.header.stamp
+                debug_target_msg.header.stamp = header.stamp
                 debug_target_msg.header.frame_id = image_frame
 
                 # debug_camera_info_msg = get_camera_info_msg(target_msg.height, target_msg.width, debug_target_msg.height, debug_target_msg.width)
@@ -407,23 +474,23 @@ class ROSNode(object):
         sparse_np[sparse_np > self.max_depth ] = 0
 
         # use amount of samples the network was trained for
-        try:
-            n_samples = self.sparsifier.num_samples
-        except:
-            n_samples = 100 
-        ni,nj = np.nonzero(sparse_np)
-        if len(ni) > n_samples:
-            ri = np.random.choice(len(ni), n_samples, replace=False)
-            inv_mask = np.ones((self.oheight, self.owidth), dtype=np.bool)
-            inv_mask[ni[ri], nj[ri]] = 0
-            sparse_np[inv_mask] = 0.0
+        # try:
+        #     n_samples = self.sparsifier.num_samples
+        # except:
+        #     n_samples = 100 
+        # ni,nj = np.nonzero(sparse_np)
+        # if len(ni) > n_samples:
+        #     ri = np.random.choice(len(ni), n_samples, replace=False)
+        #     inv_mask = np.ones((self.oheight, self.owidth), dtype=np.bool)
+        #     inv_mask[ni[ri], nj[ri]] = 0
+        #     sparse_np[inv_mask] = 0.0
 
-            assert len(sparse_np[sparse_np>0.0]) == n_samples, "Not exactly n_points!"
-        elif len(ni) < 5:
-            rospy.logwarn("Less then 5 points in sparse depth map: %d, returning nothing" % len(ni))
-            return np.zeros_like(sparse_np), sparse_np
-        else: 
-            rospy.logwarn("sparse depth map has less then %d points: %d" % (n_samples, len(ni)))
+        #     assert len(sparse_np[sparse_np>0.0]) == n_samples, "Not exactly n_points!"
+        # elif len(ni) < 5:
+        #     rospy.logwarn("Less then 5 points in sparse depth map: %d, returning nothing" % len(ni))
+        #     return np.zeros_like(sparse_np), sparse_np
+        # else: 
+        #     rospy.logwarn("sparse depth map has less then %d points: %d" % (n_samples, len(ni)))
 
         # sparse_np = np.zeros((self.oheight,self.owidth))
 
@@ -463,22 +530,7 @@ class ROSNode(object):
             target_tensor = to_tensor(target_np)
             target_tensor = target_tensor.unsqueeze(0)
             self.evaluate_results(depth_pred, target_tensor, data_time)
-
-            # TMP 
-            depth_valid = np.where(np.logical_and(sparse_np>0.0, sparse_np<=self.max_depth))
-
-            abs_diff = np.absolute(target_np[depth_valid] - sparse_np[depth_valid])
-            abs_diff = abs_diff[~np.isnan(abs_diff)]
-            sparse_mse = (abs_diff**2).mean()
-            sparse_rmse = np.sqrt(sparse_mse)
-            rospy.loginfo("sparse rmse: %.3f" % sparse_rmse)
-
-            # compare sparse slam points to kinect points
-            in_valid = np.where(np.logical_and(sparse_np>0.0, target_np>0.0))
-            # error_mean = np.subtract(target_np[in_valid], sparse_np[in_valid]).mean()
-            # print("Sparse point error mean: %.3f" % error_mean)
-            # mse = ((target_np[in_valid]-sparse_np[in_valid])**2).mean()
-            # print("Sparse point mse: %.3f" % mse)
+            self.sample_metrics_tracker.evaluate(sparse_np, target_np)
 
         self.est_frame_saver.save_image(depth_pred_np, rgb_msg.header.stamp)
         self.rgb_frame_saver.save_image(rgb_np, rgb_msg.header.stamp)
@@ -533,45 +585,3 @@ class ROSNode(object):
         self.est_frame_saver.close()
         self.rgb_frame_saver.close()
         return
-
-
-if __name__ == "__main__":
-    import cv2
-    import matplotlib
-    import matplotlib.pyplot as plt
-
-    matplotlib.use('tkagg')
-
-    oheight = 228
-    owidth = 304
-
-    # the transform
-    transform = transforms.Compose([
-        transforms.CenterCrop((228*2, 304*2)),  # 480-24
-        transforms.Resize(float(oheight) / (228*2)),
-        transforms.CenterCrop((oheight, owidth)),
-    ])
-
-    filename = "/mnt/dataLinux/datasets/rgbd_dataset_freiburg1_room/depth/1305031930.059766.png"
-    im = cv2.imread(filename, cv2.IMREAD_GRAYSCALE)
-    x, y = im.shape
-    print("x: %d, y: %d" % (x,y))
-    # box = np.full_like(im, 255)
-    print("empty val: " + str(im[0,0]))
-
-    empty = np.full_like(im, 0)
-
-    extent = 0, y, 0, x
-    im_trans = transform(im)
-    empty[:oheight,:owidth] = im_trans
-
-    print("Green shape: " + str(im_trans.shape))
-
-    fig = plt.figure()
-    plt.imshow(im, extent=extent)
-    # plt.imshow(empty, extent=extent)
-    plt.show()
-
-
-
-

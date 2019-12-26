@@ -12,7 +12,7 @@ cudnn.benchmark = True
 
 from models import ResNet
 from metrics import AverageMeter, Result
-from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling
+from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling, ORBSampling
 import criteria
 import utils
 
@@ -359,6 +359,7 @@ def validate(val_loader, model, epoch, write_to_file=True):
         'Delta1={average.delta1:.3f}\n'
         'REL={average.absrel:.3f}\n'
         'Lg10={average.lg10:.3f}\n'
+        'Margin10={average.margin10:.3f}\n'
         't_GPU={time:.3f}\n'.format(
         average=avg, time=avg.gpu_time))
 

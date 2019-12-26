@@ -19,8 +19,8 @@ def parse_command():
     loss_names = ['l1', 'l2']
     data_names = ['nyudepthv2', 'kitti', 'tof', 'tum']
     tof_names = ['flowerpower', 'trcnarrow', 'trcstandard', 'trcwide']
-    from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling
-    sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling]]
+    from dataloaders.dense_to_sparse import UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling, ORBSampling
+    sparsifier_names = [x.name for x in [UniformSampling, SimulatedStereo, StaticSampling, ProjectiveSampling, NearestSampling, ORBSampling]]
     from models import Decoder
     decoder_names = Decoder.names
     from dataloaders.dataloader import MyDataloader

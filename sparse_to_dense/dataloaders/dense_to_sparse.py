@@ -1,4 +1,5 @@
 import numpy as np
+import threading
 import cv2
 
 def rgb2grayscale(rgb):
@@ -119,11 +120,11 @@ class ORBSampling(DenseToSparse):
     name = "orb"
 
     def __init__(self, num_samples, max_depth=np.inf, apply_kinect_noise=False):
-        DenseToSparse.__init__(self, apply_kinect_noise)
+        DenseToSparse.__init__(self)
         self.num_samples = num_samples
         self.max_depth = max_depth
-        self.orb_lock = Lock()
-        self.orb = cv2.ORB_create(edgeThreshold=15, patchSize=31, nlevels=8, fastThreshold=20, scaleFactor=1.2, WTA_K=2,scoreType=cv2.ORB_HARRIS_SCORE, firstLevel=0, nfeatures=500)
+        self.orb_lock = threading.Lock()
+        self.orb = cv2.ORB_create(edgeThreshold=15, patchSize=31, nlevels=8, fastThreshold=20, scaleFactor=1.2, WTA_K=2,scoreType=cv2.ORB_HARRIS_SCORE, firstLevel=0, nfeatures=1000)
         self.n_success = 0
         self.n_failed = 0
 
@@ -132,7 +133,7 @@ class ORBSampling(DenseToSparse):
         return "%s{ns=%d,md=%.4f}" % (self.name, self.num_samples,
                                       self.max_depth)
 
-    def depth_mask(self, rgb, depth):
+    def dense_to_sparse(self, rgb, depth):
         """
         Use ORB descriptor to determine depth points 
        """
@@ -152,7 +153,9 @@ class ORBSampling(DenseToSparse):
             # plt.imshow(img2),plt.show()
         # print("ORB failed %d times, succeeded %d times" % (self.n_failed, self.n_success))
         # self.orb_lock.release()
-
+        # TODO: measure amount of keypoints detected per frame, stddev
+        # TODO: determine keypoint error
+        # TODO: measure sampling loss
         # TODO: randomize keypoints for better training
         # TODO: ORB slam provides around 100 points randomize exact number
         # TODO: add noise on depth estimates

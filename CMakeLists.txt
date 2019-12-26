@@ -12,6 +12,7 @@ dynamic_reconfigure
 add_message_files(
     FILES
     Result.msg
+    SampleMetrics.msg
 )
 
 catkin_python_setup()

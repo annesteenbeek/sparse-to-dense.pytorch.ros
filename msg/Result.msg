@@ -8,6 +8,7 @@ float32 lg10
 float32 delta1
 float32 delta2
 float32 delta3
+float32 margin10
 float32 data_time
 float32 gpu_time
 int64 count
