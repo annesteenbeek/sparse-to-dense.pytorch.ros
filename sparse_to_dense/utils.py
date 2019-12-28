@@ -85,7 +85,9 @@ def parse_command():
                         help='dataset type when using data=tof: ' + ' | '.join(tof_names) + ' (default: flowerpower)')
     parser.add_argument('-r', '--ros', action='store_true',
                         default=False, help='Start module as ROS node.')
-
+    parser.add_argument('--evaluate_tum', dest='evaluate_tum', type=str, default='',
+                        help='evaluate model on the TUM datasets')
+ 
     parser.set_defaults(pretrained=True)
     args, unknown = parser.parse_known_args()
     if args.modality == 'rgb' and args.num_samples != 0:

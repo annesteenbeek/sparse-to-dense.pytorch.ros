@@ -6,7 +6,7 @@ import torch
 import numpy as np
 import skimage.transform as transform
 import dataloaders.transforms as transforms
-from dataloaders.dense_to_sparse import UniformSampling
+from dataloaders.dense_to_sparse import UniformSampling, ORBSampling
 from metrics import AverageMeter, Result
 from scipy import ndimage
 from PIL import Image as PILImage
@@ -135,6 +135,9 @@ def convex_mask(sparse_depth):
 
     zr, zc = np.nonzero(sparse_depth)
 
+    if len(zr) < 2:
+        return sparse_depth
+
     points = np.stack((zc,zr), axis=-1)
     hull = ConvexHull(points)
     hull_vertice_points = hull.points[hull.vertices].flatten().tolist()
@@ -210,33 +213,50 @@ class FrameSaver(object):
         print("Saved frames in {}".format(self.foldername))
 
 class SampleMetricsTracker(object):
-    def __init__(self):
+    def __init__(self, max_depth=np.inf):
         self.metric_pub = rospy.Publisher('sample_metrics', SampleMetrics, queue_size=5)
+        self.max_depth = max_depth
         self.samples = []
         self.sum_mse, self.sum_rmse, self.sum_mae = 0, 0, 0
-        self.sum_stde = 0
+        self.sum_stde, self.sum_error = 0, 0
         self.count = 0
 
-    def evaluate(self, sparse_np, target_np):
-        self.count += 1
-        n_points = np.count_nonzero(sparse_np)
-        self.samples.append(n_points)
+        self.save_sparse = np.array([])
+        self.save_target = np.array([])
 
-        depth_valid = np.nonzero(sparse_np)
+    def evaluate(self, sparse_np, target_np):
+
+        depth_valid = sparse_np > 0
+        depth_valid = np.bitwise_and(depth_valid, target_np > 0)
+        if self.max_depth is not np.inf:
+            depth_valid = np.bitwise_and(depth_valid, sparse_np <= self.max_depth)
+
+        n_frame = np.count_nonzero(depth_valid)
+        if n_frame <= 0:
+            return
+
+        self.count += 1
+        self.samples.append(n_frame)
         error = target_np[depth_valid] - sparse_np[depth_valid]
-        error = error[~np.isnan(error)]
+        # error = error[~np.isnan(error)]
         abs_diff = np.absolute(error)
+        self.sum_error += error.mean()
         self.sum_mae += abs_diff.mean()
         mse = (abs_diff**2).mean()
         self.sum_mse += mse
         self.sum_rmse += np.sqrt(mse)
         self.sum_stde += np.std(error)
 
-        self.publish()
+        self.save_sparse = np.append(self.save_sparse, sparse_np[depth_valid])
+        self.save_target = np.append(self.save_target, target_np[depth_valid])
 
-    def publish(self):
+        self.publish(n_frame)
+
+    def publish(self, n_frame):
         msg = SampleMetrics()
 
+        msg.max_depth = self.max_depth
+        msg.n_frame = int(n_frame)
         msg.n_avg = np.mean(self.samples)
         msg.min = min(self.samples)
         msg.max = max(self.samples)
@@ -244,10 +264,17 @@ class SampleMetricsTracker(object):
         msg.mse = self.sum_mse / self.count
         msg.rmse = self.sum_rmse / self.count
         msg.mae = self.sum_mae / self.count
+        msg.me = self.sum_error / self.count
         msg.stde = self.sum_stde /self.count
         msg.count = self.count
 
         self.metric_pub.publish(msg)
+
+    def save(self):
+        np.save("sparse_samples.npy", self.save_sparse)
+        np.save("target_samples.npy", self.save_target)
+        print("saved samples")
+
 
 
 class ROSNode(object):
@@ -259,13 +286,13 @@ class ROSNode(object):
         self.oheight = oheight
         self.owidth = owidth
 
-        self.sparsifier = UniformSampling(num_samples=100, max_depth=5.0)
+        self.sparsifier = ORBSampling(num_samples=100, max_depth=5.0)
 
         self.model.eval()
         self.img_lock = threading.Lock()
 
-        self.est_frame_saver = FrameSaver(prefix="est", enabled=True)
-        self.rgb_frame_saver = FrameSaver(prefix="rgb_est", enabled=True)
+        self.est_frame_saver = FrameSaver(prefix="est", enabled=False)
+        self.rgb_frame_saver = FrameSaver(prefix="rgb_est", enabled=False)
 
         target_topic = rospy.get_param("~target_topic", "")
         self.emulate_sparse_depth = rospy.get_param("~emulate_sparse_depth", False)
@@ -279,7 +306,7 @@ class ROSNode(object):
         self.debug_cam_info_pub = rospy.Publisher('debug/camera_info', CameraInfo, queue_size=5)
         self.cam_info_pub = rospy.Publisher('camera_info', CameraInfo, queue_size=5)
         self.avg_res_pub = rospy.Publisher('average_results', ResultMsg, queue_size=5)
-        self.sample_metrics_tracker = SampleMetricsTracker()
+        self.sample_metrics_tracker = SampleMetricsTracker(self.max_depth)
 
         self.rgb_sub = message_filters.Subscriber('rgb_in', Image)
         self.sparse_sub = message_filters.Subscriber('depth_sparse', Image)
@@ -414,9 +441,7 @@ class ROSNode(object):
             self.img_lock.release()
 
     def create_rgbd(self, rgb, depth):
-        mask_keep = self.sparsifier.dense_to_sparse(rgb, depth)
-        sparse_depth = np.zeros(depth.shape)
-        sparse_depth[mask_keep] = depth[mask_keep]
+        sparse_depth = self.sparsifier.dense_to_sparse(rgb, depth)
         rgbd = np.append(rgb, np.expand_dims(sparse_depth, axis=2), axis=2)
         return rgbd
 
@@ -559,11 +584,13 @@ class ROSNode(object):
 
         # add preknown points to prediction
         in_depth = input_tensor[:, 3:, :, :]
-        in_valid = in_depth > 0.0
-        depth_pred[in_valid] = in_depth[in_valid]
+        # in_valid = in_depth > 0.0
+        # depth_pred[in_valid] = in_depth[in_valid]
 
         in_depth_np = np.squeeze(in_depth.data.cpu().numpy())
         depth_pred_np = np.squeeze(depth_pred.data.cpu().numpy())
+
+        self.sample_metrics_tracker.evaluate(in_depth_np, target_np)
 
         self.est_frame_saver.save_image(target_np, rgb_msg.header.stamp)
         self.rgb_frame_saver.save_image(rgb_np, rgb_msg.header.stamp)
@@ -584,4 +611,5 @@ class ROSNode(object):
         rospy.spin()
         self.est_frame_saver.close()
         self.rgb_frame_saver.close()
+        # self.sample_metrics_tracker.save()
         return

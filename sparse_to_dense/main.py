@@ -4,6 +4,7 @@ import os
 import time
 import csv
 import numpy as np
+from tqdm import tqdm
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -22,8 +23,22 @@ print(args)
 fieldnames = ['mse', 'rmse', 'absrel', 'lg10', 'mae',
                 'delta1', 'delta2', 'delta3',
                 'data_time', 'gpu_time']
+
+tum_rooms = [
+    'rgbd_dataset_freiburg1_room',
+    'rgbd_dataset_freiburg3_long_office_household'
+]
+
 best_result = Result()
 best_result.set_to_worst()
+
+def write_csv(filename, avg):
+    with open(filename, 'a') as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writerow({'mse': avg.mse, 'rmse': avg.rmse, 'absrel': avg.absrel, 'lg10': avg.lg10,
+            'mae': avg.mae, 'delta1': avg.delta1, 'delta2': avg.delta2, 'delta3': avg.delta3,
+            'data_time': avg.data_time, 'gpu_time': avg.gpu_time})
+
 
 def create_data_loaders(args):
     # Data loading code
@@ -46,6 +61,8 @@ def create_data_loaders(args):
         sparsifier = ProjectiveSampling()
     elif args.sparsifier == NearestSampling.name:
         sparsifier = NearestSampling(pixx=args.pixx, pixy=args.pixy)
+    elif args.sparsifier == ORBSampling.name:
+        sparsifier = ORBSampling(num_samples=args.num_samples, max_depth=max_depth)
     else:
         print("Unknown sparsifier")
 
@@ -75,15 +92,10 @@ def create_data_loaders(args):
         val_dataset = TOFDataset(valdir, type='val',
             modality=args.modality, sparsifier=StaticSampling(), augArgs=args)
     elif args.data == 'tum':
-        print("using tum dataset")
-        global output_directory
-
         if not args.evaluate:
             raise RuntimeError('TUM dataset only used for evaluation')
         from dataloaders.tum_dataloader import TUMDataset
-        room = 'rgbd_dataset_freiburg1_room'
-        # room = 'rgbd_dataset_freiburg3_long_office_household'
-        valdir = os.path.join('data', args.data, room)
+        valdir = os.path.join('data', 'tum', args.tum_room)
         val_dataset = TUMDataset(valdir, type='val', 
             modality=args.modality, sparsifier=sparsifier, augArgs=args)
     else:
@@ -138,21 +150,43 @@ def main():
         print("=> loading best model '{}'".format(args.evaluate))
         checkpoint = torch.load(args.evaluate)
         output_directory = os.path.dirname(args.evaluate)
-        # TMP
-        if args.data == "tum": # tum only used for evaluation
-            output_directory = os.path.join(output_directory, "tum")
-            do_tum = True
         args = checkpoint['args']
         start_epoch = checkpoint['epoch'] + 1
         best_result = checkpoint['best_result']
         model = checkpoint['model']
         print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
-        if do_tum:
-            args.data = "tum"
         args.evaluate = True
         _, val_loader = create_data_loaders(args)
         validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
         return
+    if args.evaluate_tum:
+        assert os.path.isfile(args.evaluate_tum), \
+        "=> no best model found at '{}'".format(args.evaluate_tum)
+        print("=> loading best model '{}'".format(args.evaluate_tum))
+        checkpoint = torch.load(args.evaluate_tum)
+        output_directory = os.path.dirname(args.evaluate_tum)
+        args = checkpoint['args']
+        start_epoch = checkpoint['epoch'] + 1
+        best_result = checkpoint['best_result']
+        model = checkpoint['model']
+        print("=> loaded best model (epoch {})".format(checkpoint['epoch']))
+        args.data = "tum"
+        args.evaluate = True
+
+        # TODO also validate NYU?
+
+        test_csv = os.path.join(output_directory, 'tum_eval.csv')
+        with open(test_csv, 'w') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+
+        for room in tum_rooms:
+            args.tum_room = room
+            _, val_loader = create_data_loaders(args)
+            validate(val_loader, model, checkpoint['epoch'], write_to_file=True)
+        return
+
+    
     elif args.crossTrain:
         print("Retraining loaded model on current input parameters")
         train_loader, val_loader = create_data_loaders(args)
@@ -196,6 +230,8 @@ def main():
 
         # model = torch.nn.DataParallel(model).cuda() # for multi-gpu training
         model = model.cuda()
+        # from torchsummary import summary
+        # summary(model, input_size=(in_channels, 228, 304))
 
     # define loss function (criterion) and optimizer
     if args.criterion == 'l2':
@@ -250,106 +286,90 @@ def train(train_loader, model, criterion, optimizer, epoch):
     average_meter = AverageMeter()
     model.train() # switch to train mode
     end = time.time()
-    for i, (input, target) in enumerate(train_loader):
+    with tqdm(total=len(train_loader)) as t:
+        for i, (input, target) in enumerate(train_loader):
 
-        input, target = input.cuda(), target.cuda()
-        torch.cuda.synchronize()
-        data_time = time.time() - end
+            input, target = input.cuda(), target.cuda()
+            torch.cuda.synchronize()
+            data_time = time.time() - end
 
-        # compute pred
-        end = time.time()
-        pred = model(input)
-        loss = criterion(pred, target)
-        optimizer.zero_grad()
-        loss.backward() # compute gradient and do SGD step
-        optimizer.step()
-        torch.cuda.synchronize()
-        gpu_time = time.time() - end
+            # compute pred
+            end = time.time()
+            pred = model(input)
+            loss = criterion(pred, target)
+            optimizer.zero_grad()
+            loss.backward() # compute gradient and do SGD step
+            optimizer.step()
+            torch.cuda.synchronize()
+            gpu_time = time.time() - end
 
-        # measure accuracy and record loss
-        result = Result()
-        result.evaluate(pred.data, target.data)
-        average_meter.update(result, gpu_time, data_time, input.size(0))
-        end = time.time()
+            # measure accuracy and record loss
+            result = Result()
+            result.evaluate(pred.data, target.data)
+            average_meter.update(result, gpu_time, data_time, input.size(0))
+            end = time.time()
 
-        if (i + 1) % args.print_freq == 0:
-            print('=> output: {}'.format(output_directory))
-            print('Train Epoch: {0} [{1}/{2}]\t'
-                  't_Data={data_time:.3f}({average.data_time:.3f}) '
-                  't_GPU={gpu_time:.3f}({average.gpu_time:.3f})\n\t'
-                  'RMSE={result.rmse:.2f}({average.rmse:.2f}) '
-                  'MAE={result.mae:.2f}({average.mae:.2f}) '
-                  'Delta1={result.delta1:.3f}({average.delta1:.3f}) '
-                  'REL={result.absrel:.3f}({average.absrel:.3f}) '
-                  'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
-                  epoch, i+1, len(train_loader), data_time=data_time,
-                  gpu_time=gpu_time, result=result, average=average_meter.average()))
+            if (i + 1) % args.print_freq == 0:
+                avg = average_meter.average()
+                t.set_postfix(gpu_time=gpu_time, RMSE=avg.rmse, MAE=avg.mae)
+            t.update()
 
     avg = average_meter.average()
-    with open(train_csv, 'a') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writerow({'mse': avg.mse, 'rmse': avg.rmse, 'absrel': avg.absrel, 'lg10': avg.lg10,
-            'mae': avg.mae, 'delta1': avg.delta1, 'delta2': avg.delta2, 'delta3': avg.delta3,
-            'gpu_time': avg.gpu_time, 'data_time': avg.data_time})
-
+    write_csv(train_csv, avg)
 
 def validate(val_loader, model, epoch, write_to_file=True):
     average_meter = AverageMeter()
     model.eval() # switch to evaluate mode
     end = time.time()
-    for i, (input, target) in enumerate(val_loader):
-        input, target = input.cuda(), target.cuda()
-        torch.cuda.synchronize()
-        data_time = time.time() - end
+    with tqdm(total=len(val_loader)) as t:
+        for i, (input, target) in enumerate(val_loader):
+            input, target = input.cuda(), target.cuda()
+            torch.cuda.synchronize()
+            data_time = time.time() - end
 
-        # compute output
-        end = time.time()
-        with torch.no_grad():
-            pred = model(input)
-        torch.cuda.synchronize()
-        gpu_time = time.time() - end
+            # compute output
+            end = time.time()
+            with torch.no_grad():
+                pred = model(input)
+            torch.cuda.synchronize()
+            gpu_time = time.time() - end
 
-        # measure accuracy and record loss
-        result = Result()
-        result.evaluate(pred.data, target.data)
-        average_meter.update(result, gpu_time, data_time, input.size(0))
-        end = time.time()
+            # measure accuracy and record loss
+            result = Result()
+            result.evaluate(pred.data, target.data)
+            average_meter.update(result, gpu_time, data_time, input.size(0))
+            end = time.time()
 
-        # save 8 images for visualization
-        skip = 50
-        if args.modality == 'd':
-            img_merge = None
-        else:
-            if args.modality == 'rgb':
-                rgb = input
-            elif args.modality == 'rgbd':
-                rgb = input[:,:3,:,:]
-                depth = input[:,3:,:,:]
+            # save 8 images for visualization
+            skip = 50
+            if args.modality == 'd':
+                img_merge = None
+            else:
+                if args.modality == 'rgb':
+                    rgb = input
+                elif args.modality == 'rgbd':
+                    rgb = input[:,:3,:,:]
+                    depth = input[:,3:,:,:]
 
-            if i == 0:
-                if args.modality == 'rgbd':
-                    img_merge = utils.merge_into_row_with_gt(rgb, depth, target, pred)
-                else:
-                    img_merge = utils.merge_into_row(rgb, target, pred)
-            elif (i < 8*skip) and (i % skip == 0):
-                if args.modality == 'rgbd':
-                    row = utils.merge_into_row_with_gt(rgb, depth, target, pred)
-                else:
-                    row = utils.merge_into_row(rgb, target, pred)
-                img_merge = utils.add_row(img_merge, row)
-            elif i == 8*skip:
-                filename = output_directory + '/comparison_' + str(epoch) + '.png'
-                utils.save_image(img_merge, filename)
+                if i == 0:
+                    if args.modality == 'rgbd':
+                        img_merge = utils.merge_into_row_with_gt(rgb, depth, target, pred)
+                    else:
+                        img_merge = utils.merge_into_row(rgb, target, pred)
+                elif (i < 8*skip) and (i % skip == 0):
+                    if args.modality == 'rgbd':
+                        row = utils.merge_into_row_with_gt(rgb, depth, target, pred)
+                    else:
+                        row = utils.merge_into_row(rgb, target, pred)
+                    img_merge = utils.add_row(img_merge, row)
+                elif i == 8*skip:
+                    filename = output_directory + '/comparison_' + str(epoch) + '.png'
+                    utils.save_image(img_merge, filename)
 
-        if (i+1) % args.print_freq == 0:
-            print('Test: [{0}/{1}]\t'
-                  't_GPU={gpu_time:.3f}({average.gpu_time:.3f})\n\t'
-                  'RMSE={result.rmse:.2f}({average.rmse:.2f}) '
-                  'MAE={result.mae:.2f}({average.mae:.2f}) '
-                  'Delta1={result.delta1:.3f}({average.delta1:.3f}) '
-                  'REL={result.absrel:.3f}({average.absrel:.3f}) '
-                  'Lg10={result.lg10:.3f}({average.lg10:.3f}) '.format(
-                   i+1, len(val_loader), gpu_time=gpu_time, result=result, average=average_meter.average()))
+            if (i+1) % args.print_freq == 0:
+                avg = average_meter.average()
+                t.set_postfix(gpu_time=gpu_time, RMSE=avg.rmse, MAE=avg.mae)
+            t.update()
 
     avg = average_meter.average()
 
@@ -364,11 +384,8 @@ def validate(val_loader, model, epoch, write_to_file=True):
         average=avg, time=avg.gpu_time))
 
     if write_to_file:
-        with open(test_csv, 'a') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writerow({'mse': avg.mse, 'rmse': avg.rmse, 'absrel': avg.absrel, 'lg10': avg.lg10,
-                'mae': avg.mae, 'delta1': avg.delta1, 'delta2': avg.delta2, 'delta3': avg.delta3,
-                'data_time': avg.data_time, 'gpu_time': avg.gpu_time})
+        write_csv(test_csv, avg)
+
     return avg, img_merge
 
 if __name__ == '__main__':

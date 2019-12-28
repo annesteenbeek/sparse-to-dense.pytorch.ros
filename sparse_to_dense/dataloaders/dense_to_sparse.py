@@ -11,7 +11,13 @@ class DenseToSparse:
         pass
 
     def dense_to_sparse(self, rgb, depth):
-        pass
+        mask_keep = self.create_sparse_mask(rgb, depth)
+        sparse_depth = np.zeros(depth.shape)
+        sparse_depth[mask_keep] = depth[mask_keep]
+        return sparse_depth
+
+    def create_sparse_mask(self, rgb, depth):
+        raise RuntimeError("create_sparse_mask not implemented")
 
     def __repr__(self):
         pass
@@ -24,7 +30,7 @@ class ProjectiveSampling(DenseToSparse):
     def __repr__(self):
         return "%s{ns=%d,md=%f,pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixxy)
 
-    def dense_to_sparse(self, rgb, depth):
+    def create_sparse_mask(self, rgb, depth):
         """
         Applies the projective equations to the depth map to calculate where the physical sensor would
         read a pixel from, then returns a boolean mask with a 1 in this position and zeros elsewhere.
@@ -79,7 +85,7 @@ class StaticSampling(DenseToSparse):
     def __repr__(self):
         return "%s{pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixy)
 
-    def dense_to_sparse(self, rgb, depth):
+    def create_sparse_mask(self, rgb, depth):
         """
         Returns a boolean mask with 1 at [pixy,pixx] and zeros everywhere else
         """
@@ -97,7 +103,7 @@ class NearestSampling(DenseToSparse):
     def __repr__(self):
         return "%s{pixx=%d,pixy=%d}" % (self.name, self.pixx, self.pixy)
 
-    def dense_to_sparse(self, rgb, depth):
+    def create_sparse_mask(self, rgb, depth):
         """
         Returns a boolean mask with 1 at the nearest depth pixel to [pixy,pixx] 
         which is non zero, and zeros everywhere else
@@ -116,63 +122,6 @@ class NearestSampling(DenseToSparse):
         mask[pixy,pixx] = True
         return mask
 
-class ORBSampling(DenseToSparse):
-    name = "orb"
-
-    def __init__(self, num_samples, max_depth=np.inf, apply_kinect_noise=False):
-        DenseToSparse.__init__(self)
-        self.num_samples = num_samples
-        self.max_depth = max_depth
-        self.orb_lock = threading.Lock()
-        self.orb = cv2.ORB_create(edgeThreshold=15, patchSize=31, nlevels=8, fastThreshold=20, scaleFactor=1.2, WTA_K=2,scoreType=cv2.ORB_HARRIS_SCORE, firstLevel=0, nfeatures=1000)
-        self.n_success = 0
-        self.n_failed = 0
-
-
-    def __repr__(self):
-        return "%s{ns=%d,md=%.4f}" % (self.name, self.num_samples,
-                                      self.max_depth)
-
-    def dense_to_sparse(self, rgb, depth):
-        """
-        Use ORB descriptor to determine depth points 
-       """
-        depth_mask = np.zeros_like(depth, dtype=np.bool)
-        # return depth_mask
-        _rgb = (rgb*255.0).astype('uint8')
-
-        # self.orb_lock.acquire()
-        # gray = rgb2grayscale(rgb)
-        kps = self.orb.detect(_rgb)
-
-        if len(kps) == 0:
-            self.n_failed += 1
-        else:
-            self.n_success += 1
-            # img2 = cv2.drawKeypoints(_rgb,kps,None,color=(0,255,0), flags=0)
-            # plt.imshow(img2),plt.show()
-        # print("ORB failed %d times, succeeded %d times" % (self.n_failed, self.n_success))
-        # self.orb_lock.release()
-        # TODO: measure amount of keypoints detected per frame, stddev
-        # TODO: determine keypoint error
-        # TODO: measure sampling loss
-        # TODO: randomize keypoints for better training
-        # TODO: ORB slam provides around 100 points randomize exact number
-        # TODO: add noise on depth estimates
-        samples = 0
-        for kp in kps:
-            c,r = int(kp.pt[0]), int(kp.pt[1])
-            if depth[r,c] != 0.0 and depth[r,c] <= self.max_depth:
-                depth_mask[r,c] = True
-                samples+=1
-                if samples == self.num_samples:
-                    break
-        # if samples < self.num_samples:
-        #     print("Less then required samples: %d/%d, %d available" % (samples, self.num_samples, len(kps)))
-        #     print("ORB failed %d times, succeeded %d times" % (self.n_failed, self.n_success))
-        return depth_mask
-
-
 class UniformSampling(DenseToSparse):
     name = "uar"
     def __init__(self, num_samples, max_depth=np.inf):
@@ -183,7 +132,7 @@ class UniformSampling(DenseToSparse):
     def __repr__(self):
         return "%s{ns=%d,md=%f}" % (self.name, self.num_samples, self.max_depth)
 
-    def dense_to_sparse(self, rgb, depth):
+    def create_sparse_mask(self, rgb, depth):
         """
         Samples pixels with `num_samples`/#pixels probability in `depth`.
         Only pixels with a maximum depth of `max_depth` are considered.
@@ -221,7 +170,7 @@ class SimulatedStereo(DenseToSparse):
     # Take simple sobel gradients
     # Threshold the edge gradient
     # Dilatate
-    def dense_to_sparse(self, rgb, depth):
+    def create_sparse_mask(self, rgb, depth):
         gray = rgb2grayscale(rgb)
         blurred = cv2.GaussianBlur(gray, (5, 5), 0)
         gx = cv2.Sobel(blurred, cv2.CV_64F, 1, 0, ksize=5)
@@ -241,3 +190,58 @@ class SimulatedStereo(DenseToSparse):
 
         mask = np.bitwise_and(mag_mask, depth_mask)
         return mask
+
+class ORBSampling(DenseToSparse):
+    name = "orb"
+
+    def __init__(self, num_samples, max_depth=np.inf):
+        DenseToSparse.__init__(self)
+        self.num_samples = num_samples
+        self.max_depth = max_depth
+        self.orb_lock = threading.Lock()
+        self.orb = cv2.ORB_create(edgeThreshold=15, patchSize=31, nlevels=8, fastThreshold=20, scaleFactor=1.2, WTA_K=2,scoreType=cv2.ORB_HARRIS_SCORE, firstLevel=0, nfeatures=1000)
+
+        self.num_samples = 385
+        self.num_dev = 53
+        self.error_mean = 0.
+        self.error_dev = 0.1
+
+        self.fails = 0
+
+
+    def __repr__(self):
+        return "%s{ns=%d,md=%.4f}" % (self.name, self.num_samples,
+                                      self.max_depth)
+
+    def create_sparse_mask(self, rgb, depth):
+        """
+        Use ORB descriptor to determine depth points 
+       """
+        depth_mask = np.zeros_like(depth, dtype=np.bool)
+        _rgb = (rgb*255.0).astype('uint8')
+
+        self.orb_lock.acquire()
+        kps = self.orb.detect(_rgb)
+
+        self.orb_lock.release()
+
+        n_samples = int(np.random.normal(self.num_samples, self.num_dev))
+        indexes = np.arange(min(n_samples, len(kps)))
+        np.random.shuffle(indexes)
+
+        for index in indexes:
+            kp = kps[index]
+            c,r = int(kp.pt[0]), int(kp.pt[1])
+            depth_mask[r,c] = True
+
+        return depth_mask
+
+    def dense_to_sparse(self, rgb, depth):
+        mask_keep = self.create_sparse_mask(rgb, depth)
+        sparse_depth = np.zeros(depth.shape)
+        sparse_depth[mask_keep] = depth[mask_keep]
+
+        errors = np.random.normal(self.error_mean, self.error_dev, np.sum(mask_keep))
+        sparse_depth[mask_keep] += errors
+
+        return sparse_depth
