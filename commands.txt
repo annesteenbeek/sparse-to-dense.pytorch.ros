@@ -1,0 +1,6 @@
+# args  | state (started, finished, failed)
+-a resnet18 -d upproj -m rgbd -s 100 --sparsifier uar # finished
+-a resnet18 -d upproj -m rgbd -s 100 --sparsifier uar # finished
+-a resnet18 -d upproj -m rgbd -s 100 --sparsifier uar # failed
+-a resnet18 -d upproj -m rgbd -s 200 --sparsifier uar # started 
+-a resnet18 -d upproj -m rgbd -s 200 --sparsifier uar  
