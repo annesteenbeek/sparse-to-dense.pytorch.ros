@@ -20,7 +20,7 @@ import utils
 args = utils.parse_command()
 print(args)
 
-fieldnames = ['mse', 'rmse', 'absrel', 'lg10', 'mae',
+fieldnames = ['mse', 'rmse', 'margin10', 'absrel', 'lg10', 'mae',
                 'delta1', 'delta2', 'delta3',
                 'data_time', 'gpu_time']
 
@@ -34,10 +34,8 @@ best_result.set_to_worst()
 
 def write_csv(filename, avg):
     with open(filename, 'a') as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writerow({'mse': avg.mse, 'rmse': avg.rmse, 'absrel': avg.absrel, 'lg10': avg.lg10,
-            'mae': avg.mae, 'delta1': avg.delta1, 'delta2': avg.delta2, 'delta3': avg.delta3,
-            'data_time': avg.data_time, 'gpu_time': avg.gpu_time})
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction='ignore')
+        writer.writerow(vars(avg))
 
 
 def create_data_loaders(args):
@@ -62,7 +60,7 @@ def create_data_loaders(args):
     elif args.sparsifier == NearestSampling.name:
         sparsifier = NearestSampling(pixx=args.pixx, pixy=args.pixy)
     elif args.sparsifier == ORBSampling.name:
-        sparsifier = ORBSampling(num_samples=args.num_samples, max_depth=max_depth)
+        sparsifier = ORBSampling(num_samples=args.num_samples, max_depth=max_depth, add_noise=args.orb_noise)
     else:
         print("Unknown sparsifier")
 
@@ -118,7 +116,7 @@ def create_data_loaders(args):
     return train_loader, val_loader
 
 def main():
-    global args, best_result, output_directory, train_csv, test_csv
+    global args, best_result, output_directory, train_csv, test_csv, fieldnames
 
     # evaluation mode
     start_epoch = 0
@@ -175,15 +173,29 @@ def main():
 
         # TODO also validate NYU?
 
-        test_csv = os.path.join(output_directory, 'tum_eval.csv')
-        with open(test_csv, 'w') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-            writer.writeheader()
+        tum_csv = os.path.join('results', 'results_overview.csv')
+        fieldnames.insert(0, "dataset")
+        fieldnames.insert(0, "directory")
+        if not os.path.exists(tum_csv):
+            with open(tum_csv, 'w') as csvfile:
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writeheader()
+
+        # also add best result
+        best_result.dataset = "best"
+        best_result.directory = output_directory
+        write_csv(tum_csv, best_result)
+
+        args.sparsifier = "orb"
 
         for room in tum_rooms:
+            print("Evaluating dataset: %s" % room)
             args.tum_room = room
             _, val_loader = create_data_loaders(args)
-            validate(val_loader, model, checkpoint['epoch'], write_to_file=True)
+            avg, _ = validate(val_loader, model, checkpoint['epoch'], write_to_file=False)
+            avg.dataset = room + "_ORB"
+            avg.directory = output_directory
+            write_csv(tum_csv, avg)
         return
 
     
@@ -287,6 +299,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
     model.train() # switch to train mode
     end = time.time()
     with tqdm(total=len(train_loader)) as t:
+        t.set_description('Epoch %d' % epoch)
         for i, (input, target) in enumerate(train_loader):
 
             input, target = input.cuda(), target.cuda()
@@ -322,6 +335,7 @@ def validate(val_loader, model, epoch, write_to_file=True):
     model.eval() # switch to evaluate mode
     end = time.time()
     with tqdm(total=len(val_loader)) as t:
+        t.set_description("validating")
         for i, (input, target) in enumerate(val_loader):
             input, target = input.cuda(), target.cuda()
             torch.cuda.synchronize()
@@ -373,13 +387,12 @@ def validate(val_loader, model, epoch, write_to_file=True):
 
     avg = average_meter.average()
 
-    print('\n*\n'
-        'RMSE={average.rmse:.3f}\n'
-        'MAE={average.mae:.3f}\n'
-        'Delta1={average.delta1:.3f}\n'
-        'REL={average.absrel:.3f}\n'
-        'Lg10={average.lg10:.3f}\n'
-        'Margin10={average.margin10:.3f}\n'
+    print('RMSE={average.rmse:.3f} '\
+        'MAE={average.mae:.3f} '\
+        'Delta1={average.delta1:.3f} '\
+        'REL={average.absrel:.3f} '\
+        'Lg10={average.lg10:.3f} '\
+        'Margin10={average.margin10:.3f} '\
         't_GPU={time:.3f}\n'.format(
         average=avg, time=avg.gpu_time))
 

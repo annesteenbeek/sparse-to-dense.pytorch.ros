@@ -298,7 +298,7 @@ class ROSNode(object):
         self.emulate_sparse_depth = rospy.get_param("~emulate_sparse_depth", False)
         self.scale_samples = rospy.get_param("~scale_samples", 20)
         self.frame = rospy.get_param("~frame", "openni_link")
-        self.max_depth = rospy.get_param("~max_depth", 5)
+        self.max_depth = rospy.get_param("~max_depth", 2)
         self.rate = rospy.Rate(rospy.get_param("~rate", 10))
 
         self.depth_est_pub = rospy.Publisher('depth_est', Image, queue_size=5)
@@ -494,33 +494,31 @@ class ROSNode(object):
         start_time = rospy.Time.now()
         rgb_np = val_transform(rgb_msg, self.oheight, self.owidth)
         sparse_np = val_transform(sparse_msg, self.oheight, self.owidth)
+ 
+        if self.scale_est is not None:
+            sparse_np = sparse_np*self.scale_est
 
         # ignore far away mappoints
         sparse_np[sparse_np > self.max_depth ] = 0
 
         # use amount of samples the network was trained for
-        # try:
-        #     n_samples = self.sparsifier.num_samples
-        # except:
-        #     n_samples = 100 
+        # n_samples = 200 
         # ni,nj = np.nonzero(sparse_np)
         # if len(ni) > n_samples:
         #     ri = np.random.choice(len(ni), n_samples, replace=False)
         #     inv_mask = np.ones((self.oheight, self.owidth), dtype=np.bool)
         #     inv_mask[ni[ri], nj[ri]] = 0
         #     sparse_np[inv_mask] = 0.0
-
+ 
         #     assert len(sparse_np[sparse_np>0.0]) == n_samples, "Not exactly n_points!"
         # elif len(ni) < 5:
         #     rospy.logwarn("Less then 5 points in sparse depth map: %d, returning nothing" % len(ni))
         #     return np.zeros_like(sparse_np), sparse_np
         # else: 
         #     rospy.logwarn("sparse depth map has less then %d points: %d" % (n_samples, len(ni)))
+ 
+        # sparse_np = np.zeros((self.oheight,self.owidth), dtype=np.float32)
 
-        # sparse_np = np.zeros((self.oheight,self.owidth))
-
-        if self.scale_est is not None:
-            sparse_np = sparse_np*self.scale_est
         rgbd = np.append(rgb_np, np.expand_dims(sparse_np, axis=2), axis=2)
 
         input_tensor = to_tensor(rgbd)
@@ -540,10 +538,10 @@ class ROSNode(object):
 
         depth_pred_np = np.squeeze(depth_pred.data.cpu().numpy())
 
-        rmask= region_mask(sparse_np)
-        cmask = convex_mask(rmask)
+        # rmask= region_mask(sparse_np)
+        # cmask = convex_mask(rmask)
 
-        depth_pred_np[~cmask] = np.nan
+        # depth_pred_np[~cmask] = np.nan
 
         # remove points too far away
         depth_pred_np[depth_pred_np > self.max_depth] = np.nan
@@ -551,7 +549,8 @@ class ROSNode(object):
         if target_msg is not None:
             data_time = (rospy.Time.now()-start_time).to_sec()
             target_np = val_transform(target_msg, self.oheight, self.owidth)
-            target_np[~cmask] = np.nan # also remove these points in target to evaluate
+            target_np[target_np > self.max_depth] = np.nan
+            # target_np[~cmask] = np.nan # also remove these points in target to evaluate
             target_tensor = to_tensor(target_np)
             target_tensor = target_tensor.unsqueeze(0)
             self.evaluate_results(depth_pred, target_tensor, data_time)

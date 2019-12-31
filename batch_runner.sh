@@ -1,38 +1,55 @@
 #!/bin/bash
 
+export CUDA_VISIBLE_DEVICES=1
+
 CHECKPOINT="model_best.pth.tar"
 
+trap "exit" INT
+
+get_checkpoint_path () {
+    cd sparse_to_dense
+    output_folder="$(python -c 'import utils; print(utils.get_output_directory(utils.parse_command()));' $cmd)"
+    cd ..
+    checkpoint_path="$output_folder/$CHECKPOINT"
+}
 
 while true; do
 
     # find any interrupted commands
-    cmd="$(grep -P -m 1 '^[^#].*(#\ *started)' commands.txt)"
+    cmd="$(grep -P -m 1 '^[^#]*.(#\ *started)' commands.txt)"
+
     if [[ -z "$cmd" ]]; then # cmd is empty
         # find new command to run
-        cmd="$(grep -P -m 1 '^[^#].*(\n$)' commands.txt)"
+        cmd="$(grep -P -m 1 '^[^#]*.$' commands.txt)"
         if [[ -z "$cmd" ]]; then # still no commands
+            echo "no more commands to run"
             break # no more commands to run
         fi
-        # set started
-        python sparse_to_dense/main.py $cmd 2>>tracebacks.txt
-    else
-        cd sparse_to_dense
-        output_folder="$(python -c 'import utils; print(utils.get_output_directory(utils.parse_command()));' $cmd)"
-        cd ..
-
+        sed -i -e "/${cmd}\ *$/s/$/ # started/" commands.txt # set started
+        echo "running: python sparse_to_dense/main.py $cmd"
+        python sparse_to_dense/main.py $cmd
+    else # resume
+        get_checkpoint_path 
         # check if there is a checkpoint available
-        checkpoint_path="$output_folder/$CHECKPOINT"
         if [[ -f "$checkpoint_path" ]]; then
-            python sparse_to_dense/main.py --resume $checkpoint_path 2>>tracebacks.txt
+            echo "resuming $checkpoint_path"
+            python sparse_to_dense/main.py --resume $checkpoint_path
         else
-            python sparse_to_dense/main.py $cmd 2>>traceback.txt
+            echo "no checkpoint, running: python sparse_to_dense/main.py $cmd"
+            python sparse_to_dense/main.py $cmd 
         fi
     fi
 
     retval=$?
     if [ $retval -ne 0 ]; then
-        # set failed
+        echo "failed $ln"
+        sed -i -e "/${cmd}/s/started/failed/" commands.txt 
+
     else
-        # set finished
+        echo "------------- finished, doing final calculations -------------"
+        get_checkpoint_path 
+        python sparse_to_dense/main.py --evaluate_tum $checkpoint_path
+        echo "finished $ln"
+        sed -i -e "/${cmd}/s/started/finished/" commands.txt 
     fi
 done

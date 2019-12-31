@@ -9,8 +9,8 @@ cmap = plt.cm.viridis
 
 def parse_command():
     #Set the depth groups as a tuple here if using --variable-scale
-    #scaleMeans = (0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5)
-    #scaleVariances = (0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
+    # scaleMeans = (0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5)
+    # scaleVariances = (0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0)
 
     scaleMeans = (0.1,1.0,1.5)
     scaleVariances = (0.0,0.0,0.0)
@@ -87,17 +87,19 @@ def parse_command():
                         default=False, help='Start module as ROS node.')
     parser.add_argument('--evaluate_tum', dest='evaluate_tum', type=str, default='',
                         help='evaluate model on the TUM datasets')
- 
+    parser.add_argument('--orb-noise', dest='orb_noise', action='store_true',
+                        help='Simulate orb sampling noise')
+
     parser.set_defaults(pretrained=True)
     args, unknown = parser.parse_known_args()
     if args.modality == 'rgb' and args.num_samples != 0:
-        print("number of samples is forced to be 0 when input modality is rgb")
+        # print("number of samples is forced to be 0 when input modality is rgb")
         args.num_samples = 0
     if args.modality == 'rgb' and args.max_depth != 0.0:
-        print("max depth is forced to be 0.0 when input modality is rgb/rgbd")
+        # print("max depth is forced to be 0.0 when input modality is rgb/rgbd")
         args.max_depth = 0.0
     if args.varScale:
-        print("\n\n         =========\nIMPORTANT: Variable depth groups are enabled, make sure to set these values at the top of the utils.py file\n         =========\n\n")
+        # print("\n\n         =========\nIMPORTANT: Variable depth groups are enabled, make sure to set these values at the top of the utils.py file\n         =========\n\n")
         if(isinstance(scaleMeans, tuple)):
             assert(len(scaleMeans) == len(scaleVariances))
     args.scaleMeans = scaleMeans
@@ -134,12 +136,18 @@ def get_output_directory(args):
             format(args.data, args.sparsifier, args.num_samples, args.modality, \
                 args.arch, args.decoder, args.criterion, args.lr, args.batch_size, \
                 args.pretrained, args.varFocus, args.varScale, args.pixx, args.pixy))
-    else:
+    elif(args.sparsifier == 'orb'):
         output_directory = os.path.join('results',
-        '{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}.varFocus={}.varScale={}'.
+        '{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}.crosstrained={}.varFocus={}.varScale={}.orbNoise={}'.
         format(args.data, args.sparsifier, args.num_samples, args.modality, \
             args.arch, args.decoder, args.criterion, args.lr, args.batch_size, \
-            args.pretrained, args.varFocus, args.varScale))
+            args.pretrained, args.crossTrain, args.varFocus, args.varScale, args.orb_noise))
+    else:
+        output_directory = os.path.join('results',
+        '{}.sparsifier={}.samples={}.modality={}.arch={}.decoder={}.criterion={}.lr={}.bs={}.pretrained={}.crosstrained={}.varFocus={}.varScale={}'.
+        format(args.data, args.sparsifier, args.num_samples, args.modality, \
+            args.arch, args.decoder, args.criterion, args.lr, args.batch_size, \
+            args.pretrained, args.crossTrain, args.varFocus, args.varScale))
     return output_directory
 
 

@@ -194,20 +194,17 @@ class SimulatedStereo(DenseToSparse):
 class ORBSampling(DenseToSparse):
     name = "orb"
 
-    def __init__(self, num_samples, max_depth=np.inf):
+    def __init__(self, num_samples, max_depth=np.inf, add_noise=False):
         DenseToSparse.__init__(self)
+        self.add_noise = add_noise
         self.num_samples = num_samples
         self.max_depth = max_depth
         self.orb_lock = threading.Lock()
         self.orb = cv2.ORB_create(edgeThreshold=15, patchSize=31, nlevels=8, fastThreshold=20, scaleFactor=1.2, WTA_K=2,scoreType=cv2.ORB_HARRIS_SCORE, firstLevel=0, nfeatures=1000)
 
-        self.num_samples = 385
         self.num_dev = 53
-        self.error_mean = 0.
+        self.error_mean = -0.07
         self.error_dev = 0.1
-
-        self.fails = 0
-
 
     def __repr__(self):
         return "%s{ns=%d,md=%.4f}" % (self.name, self.num_samples,
@@ -225,7 +222,10 @@ class ORBSampling(DenseToSparse):
 
         self.orb_lock.release()
 
-        n_samples = int(np.random.normal(self.num_samples, self.num_dev))
+        if self.add_noise:
+            n_samples = int(np.random.normal(self.num_samples, self.num_dev))
+        else:
+            n_samples = self.num_samples
         indexes = np.arange(min(n_samples, len(kps)))
         np.random.shuffle(indexes)
 
@@ -234,6 +234,9 @@ class ORBSampling(DenseToSparse):
             c,r = int(kp.pt[0]), int(kp.pt[1])
             depth_mask[r,c] = True
 
+        if self.max_depth is not np.inf:
+            depth_mask = np.bitwise_and(depth_mask, depth <= self.max_depth)
+ 
         return depth_mask
 
     def dense_to_sparse(self, rgb, depth):
@@ -241,7 +244,9 @@ class ORBSampling(DenseToSparse):
         sparse_depth = np.zeros(depth.shape)
         sparse_depth[mask_keep] = depth[mask_keep]
 
-        errors = np.random.normal(self.error_mean, self.error_dev, np.sum(mask_keep))
-        sparse_depth[mask_keep] += errors
+        if self.add_noise:
+            errors = np.random.normal(self.error_mean, self.error_dev, np.sum(mask_keep))
+            sparse_depth[mask_keep] += errors
+            sparse_depth[sparse_depth<0] = 0
 
         return sparse_depth
