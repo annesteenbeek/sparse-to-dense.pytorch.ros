@@ -1,6 +1,6 @@
 h5py
 numpy
-tqdm
+# tqdm
 matplotlib
 imageio
 scikit-image
