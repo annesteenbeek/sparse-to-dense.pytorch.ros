@@ -26,7 +26,9 @@ fieldnames = ['mse', 'rmse', 'margin10', 'absrel', 'lg10', 'mae',
 
 tum_rooms = [
     'rgbd_dataset_freiburg1_room',
-    'rgbd_dataset_freiburg3_long_office_household'
+    'rgbd_dataset_freiburg3_long_office_household',
+    'rgbd_dataset_freiburg3_nostructure_texture_near_withloop',
+    'rgbd_dataset_freiburg3_structure_texture_far'
 ]
 
 best_result = Result()
