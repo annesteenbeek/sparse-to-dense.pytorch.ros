@@ -125,7 +125,7 @@ def main():
     if args.ros:
         # import ros objects later to avoid ros dependencies
         import rospy
-        from ros.ros import ROSNode 
+        from ros.rosNode import ROSNode 
 
         rospy.init_node('sparse_to_dense')
         best_model_filename = rospy.get_param("~model_path")

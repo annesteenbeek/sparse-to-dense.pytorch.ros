@@ -1,7 +1,5 @@
 import os
-import shutil
 import threading
-import ros_numpy
 import torch
 import numpy as np
 import skimage.transform as transform
@@ -10,272 +8,27 @@ from dataloaders.dense_to_sparse import UniformSampling, ORBSampling
 from metrics import AverageMeter, Result
 from scipy import ndimage
 from PIL import Image as PILImage
-from PIL import ImageDraw
-from scipy.spatial import ConvexHull
-
+from scipy.optimize import minimize_scalar
 
 # ROS imports
 import rospy
 import tf2_ros
 import tf
 import message_filters
+import ros_numpy
 from geometry_msgs.msg import Twist
 from cv_bridge import CvBridge, CvBridgeError
 from sparse_to_dense.msg import Result as ResultMsg
-from sparse_to_dense.msg import SampleMetrics
 from sensor_msgs.msg import Image, CameraInfo
 from dynamic_reconfigure.server import Server
 from sparse_to_dense.cfg import SparseToDenseConfig 
+from ros.sampleMetricsTracker import SampleMetricsTracker
+from ros.frameSaver import FrameSaver
+from ros.utils import get_result_msg, get_camera_info_msg, val_transform, convex_mask, region_mask
+
 
 
 to_tensor = transforms.ToTensor()
-
-
-def get_result_msg(result, count=1):
-    msg = ResultMsg()
-
-    msg.irmse = result.irmse
-    msg.imae = result.imae
-    msg.mse = result.mse
-    msg.rmse = result.rmse
-    msg.mae  = result.mae 
-    msg.absrel = result.absrel
-    msg.lg10 = result.lg10
-    msg.delta1 = result.delta1
-    msg.delta2 = result.delta2
-    msg.delta3 = result.delta3
-    msg.data_time = result.data_time
-    msg.margin10 = result.margin10
-    msg.gpu_time = result.gpu_time
-    msg.count = count
-
-    return msg
-
-def get_camera_info_msg(iheight, iwidth, oheight, owidth):
-    """ Generates a camera info message, and calculates the new camera
-    parameters for the new info message based on resolution change.
-    
-    """
-    # iwidth = 640
-    # iheight = 480
-    # owidth = 304
-    # oheight = 228
-
-    camera_info_msg = CameraInfo()
-    camera_info_msg.height = oheight
-    camera_info_msg.width = owidth
-
-    # kinect params
-    fx, fy = 525, 525
-    cx, cy = 319.5, 239.5
-
-    # tello params
-    # fx, fy = 922.93, 926.02
-    # cx, cy = 472.10, 384.04
-
-    ratiox = owidth / float(iwidth)
-    ratioy = oheight / float(iheight)
-    fx *= ratiox
-    fy *= ratioy
-    cx *= ratiox
-    cy *= ratioy
-
-    camera_info_msg.K = [fx, 0, cx,
-                    0, fy, cy,
-                    0, 0, 1]
-                        
-    camera_info_msg.D = [0, 0, 0, 0]
-
-    camera_info_msg.P = [fx, 0, cx, 0,
-                        0, fy, cy, 0,
-                        0, 0, 1, 0]
-
-    return camera_info_msg
-
-cvBridge = CvBridge()
-def val_transform(img_msg, oheight, owidth):
-    img_cv = cvBridge.imgmsg_to_cv2(img_msg, desired_encoding="passthrough")
-
-    resize = 240.0/480
-    transform = transforms.Compose([
-        transforms.Resize(resize),
-        transforms.CenterCrop((oheight, owidth)),
-    ])
-
-    if img_cv.ndim == 2: # depth image
-        n_depth = np.count_nonzero(img_cv)
-        if n_depth < 1000: # if less then n points, must be sparse
-            # to prevent sparse point loss, dont use normal resize
-
-            def sparse_resize(img):
-                rb, cb = img_cv.shape # big
-                rs, cs = int(rb*resize), int(cb*resize) # small
-                sh = (rs, int(rb/rs), cs, int(cb/cs)) # new shape 
-                return img_cv.reshape(sh).max(-1).max(1)
-
-            transform = transforms.Compose([
-                sparse_resize,
-                transforms.CenterCrop((oheight, owidth)),
-            ])
-
-    img_np = transform(img_cv)
-    if img_cv.ndim == 3: # rgb images to floats
-        img_np = np.asfarray(img_np, dtype='float') / 255
-    # else:
-    #     if n_depth < 1000:
-    #         n_new = np.count_nonzero(img_np)
-    #         print("Sparse point loss, before: {}, after: {}, loss: {} |".format(
-    #             n_depth, n_new, n_depth-n_new
-    #         ))
-
-    return img_np
-
-def convex_mask(sparse_depth):
-    r, c= sparse_depth.shape
-
-    zr, zc = np.nonzero(sparse_depth)
-
-    if len(zr) < 2:
-        return sparse_depth
-
-    points = np.stack((zc,zr), axis=-1)
-    hull = ConvexHull(points)
-    hull_vertice_points = hull.points[hull.vertices].flatten().tolist()
-
-    img = PILImage.new('L', (c,r), 0)
-    ImageDraw.Draw(img).polygon(hull_vertice_points, outline=1, fill=1)
-    depth_mask = np.array(img, dtype=bool)
-
-    return depth_mask
-
-def region_mask(sparse_depth):
-        r = 20
-        out_shp = sparse_depth.shape
-        X,Y = [np.arange(-r,r+1)]*2
-        disk_mask = X[:,None]**2 + Y**2 <= r*r
-        Ridx,Cidx = np.where(disk_mask)
-
-        mask = np.zeros(out_shp,dtype=bool)
-
-        maskcenters = np.stack(np.nonzero(sparse_depth), axis=-1)
-        absidxR = maskcenters[:,None,0] + Ridx-r
-        absidxC = maskcenters[:,None,1] + Cidx-r
-
-        valid_mask = (absidxR >=0) & (absidxR <out_shp[0]) & \
-                    (absidxC >=0) & (absidxC <out_shp[1])
-
-        mask[absidxR[valid_mask],absidxC[valid_mask]] = 1
-
-        return mask 
-
-class FrameSaver(object):
-    # Used to collect frames for 3D reconstruction in post processing
-
-    def __init__(self, prefix, enabled=True):
-        self.enabled = enabled
-        if not self.enabled:
-            return
-
-        self.foldername = prefix
-        self.labels = open("%s.txt" % prefix, "w+")
-        self.label_lock = threading.Lock()
-
-        self.labels.write('# cnn depth estimation imagesn\n# timestamp filename \n')
-
-        if os.path.exists(self.foldername):
-            shutil.rmtree(self.foldername) # remove old folder if it exists
-        os.makedirs(self.foldername)
-
-    def save_image(self, img_np, timestamp):
-        if not self.enabled:
-            return
-        save_thread = threading.Thread(target=self._save_image, args=(img_np, timestamp))
-        save_thread.start()
-
-    def _save_image(self, img_np, timestamp):
-        time_str = "%.6f" % timestamp.to_sec()
-        img_name = "{}/{}.png".format(self.foldername, time_str)
-
-        with self.label_lock:
-            self.labels.write("{} {}\n".format(time_str, img_name))
-
-        if img_np.ndim == 3: # rgb
-            im = PILImage.fromarray((img_np*255).astype(np.uint8)) 
-        else: # depth
-            im = PILImage.fromarray((img_np*5000).astype(np.uint16)) # depth images are scaled by 5000 e.g. pixel value of 5000 is 1m
-        im.save(img_name)
-
-    def close(self):
-        if not self.enabled:
-            return
-
-        self.labels.close()
-        print("Saved frames in {}".format(self.foldername))
-
-class SampleMetricsTracker(object):
-    def __init__(self, max_depth=np.inf):
-        self.metric_pub = rospy.Publisher('sample_metrics', SampleMetrics, queue_size=5)
-        self.max_depth = max_depth
-        self.samples = []
-        self.sum_mse, self.sum_rmse, self.sum_mae = 0, 0, 0
-        self.sum_stde, self.sum_error = 0, 0
-        self.count = 0
-
-        self.save_sparse = np.array([])
-        self.save_target = np.array([])
-
-    def evaluate(self, sparse_np, target_np):
-
-        depth_valid = sparse_np > 0
-        depth_valid = np.bitwise_and(depth_valid, target_np > 0)
-        if self.max_depth is not np.inf:
-            depth_valid = np.bitwise_and(depth_valid, sparse_np <= self.max_depth)
-
-        n_frame = np.count_nonzero(depth_valid)
-        if n_frame <= 0:
-            return
-
-        self.count += 1
-        self.samples.append(n_frame)
-        error = target_np[depth_valid] - sparse_np[depth_valid]
-        # error = error[~np.isnan(error)]
-        abs_diff = np.absolute(error)
-        self.sum_error += error.mean()
-        self.sum_mae += abs_diff.mean()
-        mse = (abs_diff**2).mean()
-        self.sum_mse += mse
-        self.sum_rmse += np.sqrt(mse)
-        self.sum_stde += np.std(error)
-
-        self.save_sparse = np.append(self.save_sparse, sparse_np[depth_valid])
-        self.save_target = np.append(self.save_target, target_np[depth_valid])
-
-        self.publish(n_frame)
-
-    def publish(self, n_frame):
-        msg = SampleMetrics()
-
-        msg.max_depth = self.max_depth
-        msg.n_frame = int(n_frame)
-        msg.n_avg = np.mean(self.samples)
-        msg.min = min(self.samples)
-        msg.max = max(self.samples)
-        msg.stddev = np.std(self.samples)
-        msg.mse = self.sum_mse / self.count
-        msg.rmse = self.sum_rmse / self.count
-        msg.mae = self.sum_mae / self.count
-        msg.me = self.sum_error / self.count
-        msg.stde = self.sum_stde /self.count
-        msg.count = self.count
-
-        self.metric_pub.publish(msg)
-
-    def save(self):
-        np.save("sparse_samples.npy", self.save_sparse)
-        np.save("target_samples.npy", self.save_target)
-        print("saved samples")
-
-
 
 class ROSNode(object):
 
@@ -298,7 +51,7 @@ class ROSNode(object):
         self.emulate_sparse_depth = rospy.get_param("~emulate_sparse_depth", False)
         self.scale_samples = rospy.get_param("~scale_samples", 20)
         self.frame = rospy.get_param("~frame", "openni_link")
-        self.max_depth = rospy.get_param("~max_depth", 2)
+        self.max_depth = rospy.get_param("~max_depth", 100)
         self.rate = rospy.Rate(rospy.get_param("~rate", 10))
 
         self.depth_est_pub = rospy.Publisher('depth_est', Image, queue_size=5)
@@ -326,9 +79,13 @@ class ROSNode(object):
         self.gradient_cutoff = 0.05
         self.config_srv = Server(SparseToDenseConfig, self.config_callback)
 
-        self.scale_ratios = np.array([])
-        self.target_scale_ratios = np.array([])
+        self.frame_nr = 0
         self.scale_est = None
+
+        # TMP to store samples
+        self.sparse_points = np.array([])
+        self.est_points = np.array([])
+        self.targ_points = np.array([])
 
         self.tfBuffer = tf2_ros.Buffer()
         tf_listener = tf2_ros.TransformListener(self.tfBuffer)
@@ -380,9 +137,13 @@ class ROSNode(object):
     def sync_img_callback(self, rgb_msg, depth_msg, target_msg=None):
 
         if self.img_lock.acquire(False):
+            self.frame_nr+= 1
             header = rgb_msg.header 
-            if self.scale_ratios.size < self.scale_samples:
-                    depth_pred, sparse_debug = self.predict_scale(rgb_msg, depth_msg, target_msg)
+            if self.frame_nr < self.scale_samples:
+                    print("frame# %d" % self.frame_nr)
+                    self.predict_scale(rgb_msg, depth_msg, target_msg)
+                    self.img_lock.release()
+                    return
             else:
                 if self.emulate_sparse_depth:
                     # use rgbd for sparse pointcloud
@@ -432,7 +193,7 @@ class ROSNode(object):
                 self.target_debug_pub.publish(debug_target_msg)
                 self.debug_cam_info_pub.publish(debug_camera_info_msg)
 
-            if not self.scale_ratios.size < self.scale_samples:
+            if not self.frame_nr < self.scale_samples:
                 self.publish_scaled_transform(header.stamp)
 
             self.publish_optical_transform(header.stamp, image_frame)
@@ -444,6 +205,11 @@ class ROSNode(object):
         sparse_depth = self.sparsifier.dense_to_sparse(rgb, depth)
         rgbd = np.append(rgb, np.expand_dims(sparse_depth, axis=2), axis=2)
         return rgbd
+
+
+    def _scale_error(self, scale, test_points):
+        error = (scale*self.sparse_points - test_points)**2
+        return error.sum()
 
     def predict_scale(self, rgb_msg, sparse_msg, target_msg=None):
         rgb_np = val_transform(rgb_msg, self.oheight, self.owidth)
@@ -464,31 +230,24 @@ class ROSNode(object):
         input_var = torch.autograd.Variable(input_tensor)
 
         depth_pred = self.model(input_var)
-        depth_pred_cpu = np.squeeze(depth_pred.data.cpu().numpy())
+        depth_pred_np = np.squeeze(depth_pred.data.cpu().numpy())
 
-        # compare known points to predicted scale
-        depth_valid = np.where(np.logical_and(sparse_np>0.0, sparse_np<=self.max_depth))
+        depth_valid = sparse_np > 0
+        depth_valid = np.bitwise_and(depth_valid, depth_pred_np > 0)
 
-        pixel_ratio = depth_pred_cpu[depth_valid] / sparse_np[depth_valid]
-        pixel_ratio = pixel_ratio[~np.isnan(pixel_ratio)]
-        est_scale_ratio_median = np.median(pixel_ratio)
-        if not np.isnan(est_scale_ratio_median):
-            self.scale_ratios = np.append(self.scale_ratios, est_scale_ratio_median)
-            self.scale_est = self.scale_ratios.mean()
-            print("Frame#: %d \t frame scale median: %.2f \t  avg scale: %.2f" % (self.scale_ratios.size, est_scale_ratio_median, self.scale_est))
-
-        if target_msg is not None: # compare to target scale
+        if target_msg is not None:
             target_np = val_transform(target_msg, self.oheight, self.owidth)
-            pixel_ratio = target_np[depth_valid] / sparse_np[depth_valid]
-            pixel_ratio = pixel_ratio[~np.isnan(pixel_ratio)]
-            target_scale_ratio_median = np.median(pixel_ratio)
-            if not np.isnan(target_scale_ratio_median):
-                self.target_scale_ratios = np.append(self.target_scale_ratios, target_scale_ratio_median)
-                print("est/target scale: %.2f/%.2f" % (self.scale_est, self.target_scale_ratios.mean()))
+            depth_valid = np.bitwise_and(depth_valid, target_np > 0)
+            self.targ_points = np.append(self.targ_points, depth_pred_np[depth_valid])
 
-                self.scale_est = self.target_scale_ratios.mean()
+        self.sparse_points = np.append(self.sparse_points, sparse_np[depth_valid])
+        self.est_points = np.append(self.est_points, depth_pred_np[depth_valid])
+        self.scale_est = (minimize_scalar(self._scale_error, args=(self.est_points,))).x
+        print("scale estimate: %.3f " % self.scale_est)
 
-        return depth_pred_cpu, sparse_np 
+        if target_msg is not None:
+            target_scale_min = minimize_scalar(self._scale_error, args=(self.targ_points,))
+            print("target scale min: %.3f " % target_scale_min.x)
 
     def predict_depth(self, rgb_msg, sparse_msg, target_msg=None):
         start_time = rospy.Time.now()
@@ -611,4 +370,12 @@ class ROSNode(object):
         self.est_frame_saver.close()
         self.rgb_frame_saver.close()
         # self.sample_metrics_tracker.save()
+
+        # TMP
+        # np.save("sparse_points.npy", self.sparse_points)
+        # np.save("est_points.npy", self.est_points)
+        # np.save("targ_points.npy", self.targ_points)
+        # np.save("n_depths.npy", self.n_depths)
+
+
         return
