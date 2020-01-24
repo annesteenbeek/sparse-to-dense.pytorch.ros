@@ -24,7 +24,7 @@ from dynamic_reconfigure.server import Server
 from sparse_to_dense.cfg import SparseToDenseConfig 
 from ros.sampleMetricsTracker import SampleMetricsTracker
 from ros.frameSaver import FrameSaver
-from ros.utils import get_result_msg, get_camera_info_msg, val_transform, convex_mask, region_mask
+from ros.utils import get_result_msg, get_camera_info_msg, val_transform, convex_mask, region_mask, statistical_outlier_removal, median_filter
 
 
 
@@ -52,10 +52,12 @@ class ROSNode(object):
         self.scale_samples = rospy.get_param("~scale_samples", 20)
         self.frame = rospy.get_param("~frame", "openni_link")
         self.max_depth = rospy.get_param("~max_depth", 100)
-        self.rate = rospy.Rate(rospy.get_param("~rate", 10))
+        self.filter_low_texture = rospy.get_param("~filter_low_texture", False)
+        self.use_tello = rospy.get_param("~use_tello", False)
 
         self.depth_est_pub = rospy.Publisher('depth_est', Image, queue_size=5)
         self.sparse_debug_pub = rospy.Publisher('debug/sparse_depth', Image, queue_size=5)
+        self.rbg_debug_pub = rospy.Publisher('debug/rgb', Image, queue_size=5)
         self.debug_cam_info_pub = rospy.Publisher('debug/camera_info', CameraInfo, queue_size=5)
         self.cam_info_pub = rospy.Publisher('camera_info', CameraInfo, queue_size=5)
         self.avg_res_pub = rospy.Publisher('average_results', ResultMsg, queue_size=5)
@@ -86,6 +88,8 @@ class ROSNode(object):
         self.sparse_points = np.array([])
         self.est_points = np.array([])
         self.targ_points = np.array([])
+        self.n_points = np.array([], dtype=int)
+        self.indexes = np.array([])
 
         self.tfBuffer = tf2_ros.Buffer()
         tf_listener = tf2_ros.TransformListener(self.tfBuffer)
@@ -152,10 +156,10 @@ class ROSNode(object):
                 else:
                     depth_pred, sparse_debug = self.predict_depth(rgb_msg, depth_msg, target_msg)
 
-            # depth_filtered = self.gradient_filter_depth(depth_pred)
-            depth_filtered = depth_pred
 
-            pred_msg = ros_numpy.msgify(Image, depth_filtered, encoding=depth_msg.encoding)
+            rgb_np = val_transform(rgb_msg, self.oheight, self.owidth)
+            rgb_debug_msg = ros_numpy.msgify(Image, (rgb_np*255).astype(np.uint8), encoding=rgb_msg.encoding)
+            pred_msg = ros_numpy.msgify(Image, depth_pred, encoding=depth_msg.encoding)
             sparse_debug_msg = ros_numpy.msgify(Image, sparse_debug, encoding=depth_msg.encoding)
 
 
@@ -167,17 +171,20 @@ class ROSNode(object):
             sparse_debug_msg.header.stamp = header.stamp
             sparse_debug_msg.header.frame_id = header.frame_id
 
-            camera_info_msg = get_camera_info_msg(rgb_msg.height, rgb_msg.width, self.oheight, self.owidth)
+            rgb_debug_msg.header.stamp = header.stamp
+            rgb_debug_msg.header.frame_id = header.frame_id
+
+            camera_info_msg = get_camera_info_msg(rgb_msg.height, rgb_msg.width, self.oheight, self.owidth, self.use_tello)
             camera_info_msg.header.stamp = header.stamp
 
-            debug_camera_info_msg = get_camera_info_msg(rgb_msg.height, rgb_msg.width, self.oheight, self.owidth)
+            # debug_camera_info_msg = get_camera_info_msg(rgb_msg.height, rgb_msg.width, self.oheight, self.owidth, self.use_tello)
             # debug_camera_info_msg.header.stamp = header.stamp
-            debug_camera_info_msg.header.stamp = header.stamp
 
             self.depth_est_pub.publish(pred_msg)
             self.cam_info_pub.publish(camera_info_msg)
             self.sparse_debug_pub.publish(sparse_debug_msg)
-            self.debug_cam_info_pub.publish(debug_camera_info_msg)
+            self.rbg_debug_pub.publish(rgb_debug_msg)
+            self.debug_cam_info_pub.publish(camera_info_msg)
 
             # for depth target pointcloud
             if target_msg is not None:
@@ -188,17 +195,16 @@ class ROSNode(object):
                 debug_target_msg.header.frame_id = image_frame
 
                 # debug_camera_info_msg = get_camera_info_msg(target_msg.height, target_msg.width, debug_target_msg.height, debug_target_msg.width)
-                debug_camera_info_msg.header.stamp = target_msg.header.stamp
+                # debug_camera_info_msg.header.stamp = target_msg.header.stamp
 
                 self.target_debug_pub.publish(debug_target_msg)
-                self.debug_cam_info_pub.publish(debug_camera_info_msg)
+                self.debug_cam_info_pub.publish(camera_info_msg)
 
             if not self.frame_nr < self.scale_samples:
                 self.publish_scaled_transform(header.stamp)
 
             self.publish_optical_transform(header.stamp, image_frame)
 
-            # self.rate.sleep()
             self.img_lock.release()
 
     def create_rgbd(self, rgb, depth):
@@ -207,8 +213,8 @@ class ROSNode(object):
         return rgbd
 
 
-    def _scale_error(self, scale, test_points):
-        error = (scale*self.sparse_points - test_points)**2
+    def _scale_error(self, scale, sparse, test):
+        error = (scale*sparse - test)**2
         return error.sum()
 
     def predict_scale(self, rgb_msg, sparse_msg, target_msg=None):
@@ -216,10 +222,12 @@ class ROSNode(object):
         sparse_np = val_transform(sparse_msg, self.oheight, self.owidth)
 
         # ignore far away mappoints
-        sparse_np[sparse_np > self.max_depth ] = 0
+        # sparse_np[sparse_np > self.max_depth ] = 0
 
         empty_depth = np.zeros((self.oheight,self.owidth))
         rgbd = np.append(rgb_np, np.expand_dims(empty_depth, axis=2), axis=2)
+        
+        # rgbd = np.append(rgb_np, np.expand_dims(sparse_np, axis=2), axis=2)
 
         input_tensor = to_tensor(rgbd)
         # 4, to emualte batch size 1
@@ -238,21 +246,35 @@ class ROSNode(object):
         if target_msg is not None:
             target_np = val_transform(target_msg, self.oheight, self.owidth)
             depth_valid = np.bitwise_and(depth_valid, target_np > 0)
-            self.targ_points = np.append(self.targ_points, depth_pred_np[depth_valid])
+            self.targ_points = np.append(self.targ_points, target_np[depth_valid])
 
         self.sparse_points = np.append(self.sparse_points, sparse_np[depth_valid])
         self.est_points = np.append(self.est_points, depth_pred_np[depth_valid])
-        self.scale_est = (minimize_scalar(self._scale_error, args=(self.est_points,))).x
-        print("scale estimate: %.3f " % self.scale_est)
+        self.n_points = np.append(self.n_points, int(np.sum(depth_valid)))
+        self.indexes = np.append(self.indexes, np.nonzero(depth_valid))
+
+        _scales = self.est_points/self.sparse_points
+        median_mask = median_filter(_scales, m=0.5)
+
+        solve = minimize_scalar(self._scale_error, args=(self.sparse_points[~median_mask], self.est_points[~median_mask]))
+        self.scale_est = solve.x
 
         if target_msg is not None:
-            target_scale_min = minimize_scalar(self._scale_error, args=(self.targ_points,))
-            print("target scale min: %.3f " % target_scale_min.x)
+            _scales = self.targ_points/self.sparse_points
+            median_mask = median_filter(_scales, m=0.5)
+            target_scale_min = minimize_scalar(self._scale_error, args=(self.sparse_points[~median_mask], self.targ_points[~median_mask]))
+            print("est scale: %.3f, kinect scale : %.3f " % (self.scale_est, target_scale_min.x))
+        else:
+            print("scale estimate: %.3f " % self.scale_est)
 
     def predict_depth(self, rgb_msg, sparse_msg, target_msg=None):
         start_time = rospy.Time.now()
         rgb_np = val_transform(rgb_msg, self.oheight, self.owidth)
         sparse_np = val_transform(sparse_msg, self.oheight, self.owidth)
+
+        # filter sparse outliers
+        # rem_mask = statistical_outlier_removal(sparse_np, k=20, std_mul=1.0)
+        # sparse_np[rem_mask] = 0
  
         if self.scale_est is not None:
             sparse_np = sparse_np*self.scale_est
@@ -297,10 +319,13 @@ class ROSNode(object):
 
         depth_pred_np = np.squeeze(depth_pred.data.cpu().numpy())
 
-        # rmask= region_mask(sparse_np)
-        # cmask = convex_mask(rmask)
+        # stat_mask = statistical_outlier_removal(depth_pred_np) 
+        # depth_pred_np[stat_mask] = np.nan
 
-        # depth_pred_np[~cmask] = np.nan
+        if self.filter_low_texture:
+            rmask= region_mask(sparse_np)
+            cmask = convex_mask(rmask)
+            depth_pred_np[~cmask] = np.nan
 
         # remove points too far away
         depth_pred_np[depth_pred_np > self.max_depth] = np.nan
@@ -310,6 +335,7 @@ class ROSNode(object):
             target_np = val_transform(target_msg, self.oheight, self.owidth)
             target_np[target_np > self.max_depth] = np.nan
             # target_np[~cmask] = np.nan # also remove these points in target to evaluate
+            target_np[np.isnan(depth_pred_np)] = np.nan
             target_tensor = to_tensor(target_np)
             target_tensor = target_tensor.unsqueeze(0)
             self.evaluate_results(depth_pred, target_tensor, data_time)
@@ -317,6 +343,9 @@ class ROSNode(object):
 
         self.est_frame_saver.save_image(depth_pred_np, rgb_msg.header.stamp)
         self.rgb_frame_saver.save_image(rgb_np, rgb_msg.header.stamp)
+
+        if self.use_tello:
+            depth_pred_np = 922./525 * depth_pred_np
 
         return depth_pred_np, sparse_np 
 
@@ -372,10 +401,11 @@ class ROSNode(object):
         # self.sample_metrics_tracker.save()
 
         # TMP
-        # np.save("sparse_points.npy", self.sparse_points)
-        # np.save("est_points.npy", self.est_points)
-        # np.save("targ_points.npy", self.targ_points)
-        # np.save("n_depths.npy", self.n_depths)
+        np.save("sparse_points.npy", self.sparse_points)
+        np.save("est_points.npy", self.est_points)
+        np.save("targ_points.npy", self.targ_points)
+        np.save("n_depths.npy", self.n_points)
+        np.save("indexes.npy", self.indexes)
 
 
         return

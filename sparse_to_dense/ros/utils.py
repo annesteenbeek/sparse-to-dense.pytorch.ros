@@ -1,6 +1,6 @@
 import numpy as np
 import dataloaders.transforms as transforms
-from scipy.spatial import ConvexHull
+from scipy.spatial import ConvexHull, cKDTree
 from sparse_to_dense.msg import Result as ResultMsg
 from sensor_msgs.msg import Image, CameraInfo
 from PIL import Image as PILImage
@@ -27,13 +27,15 @@ def get_result_msg(result, count=1):
 
     return msg
 
-def get_camera_info_msg(iheight, iwidth, oheight, owidth):
+def get_camera_info_msg(iheight, iwidth, oheight, owidth, use_tello):
     """ Generates a camera info message, and calculates the new camera
     parameters for the new info message based on resolution change.
     
     """
     # iwidth = 640
     # iheight = 480
+    # iwidth = 960 # tello
+    # iheight = 720
     # owidth = 304
     # oheight = 228
 
@@ -41,13 +43,14 @@ def get_camera_info_msg(iheight, iwidth, oheight, owidth):
     camera_info_msg.height = oheight
     camera_info_msg.width = owidth
 
-    # kinect params
-    fx, fy = 525, 525
-    cx, cy = 319.5, 239.5
-
-    # tello params
-    # fx, fy = 922.93, 926.02
-    # cx, cy = 472.10, 384.04
+    if not use_tello:
+        # kinect params
+        fx, fy = 525, 525
+        cx, cy = 319.5, 239.5
+    else:
+        # tello params
+        fx, fy = 922.93, 926.02
+        cx, cy = 472.10, 384.04
 
     ratiox = owidth / float(iwidth)
     ratioy = oheight / float(iheight)
@@ -125,7 +128,7 @@ def convex_mask(sparse_depth):
     return depth_mask
 
 def region_mask(sparse_depth):
-        r = 20
+        r = 10
         out_shp = sparse_depth.shape
         X,Y = [np.arange(-r,r+1)]*2
         disk_mask = X[:,None]**2 + Y**2 <= r*r
@@ -144,3 +147,46 @@ def region_mask(sparse_depth):
 
         return mask 
 
+def statistical_outlier_removal(depth_np, k=40, std_mul=0.2):
+    # kinect params
+    ratio = 0.475
+    fx, fy = 525., 525.
+    cx, cy = 319.5, 239.5
+    
+    fx *= ratio
+    fy *= ratio
+    cx *= ratio
+    cy *= ratio
+
+    # convert pixels to world space
+    v, u = np.nonzero(depth_np)
+
+    z = depth_np[v,u]
+    x = (u - cx) * z / fx # x is columns
+    y = (v - cy) * z / fy # y is rows
+
+    # create KDTree
+    data = zip(x.ravel(), y.ravel(), z.ravel())
+    tree = cKDTree(data)
+    distances, _ = tree.query(data, k)
+    # remove self from matches
+    distances = distances[:,1::]
+
+    _mean = np.mean(distances)
+    _std = np.std(distances)
+
+    mean_pp = np.mean(distances, axis=1)
+    threshold = _mean + std_mul * _std
+    vmask = mean_pp>threshold
+
+    rem_mask = np.zeros(depth_np.shape, dtype=bool)
+
+    rem_mask[v[vmask], u[vmask]] = True
+    return rem_mask
+
+def median_filter(data, m = 2.):
+    d = np.abs(data - np.median(data))
+    mdev = np.median(d)
+    s = d/mdev if mdev else 0.
+    #     return data[s<m]
+    return s>m   

@@ -558,3 +558,29 @@ class Crop(object):
     def __repr__(self):
         return self.__class__.__name__ + '(i={0},j={1},h={2},w={3})'.format(
             self.i, self.j, self.h, self.w)
+
+
+if __name__ == "__main__":
+    import cv2
+    import matplotlib.pyplot as plt
+
+    img_cv = cv2.imread("testimg.png")
+
+    resize = 240.0/480
+    transform = Compose([
+        Resize(resize),
+        CenterCrop((228, 304)),
+    ])
+
+    img_np = transform(img_cv)
+
+    plt.figure()
+    plt.imshow(img_cv)
+
+    plt.figure()
+    plt.imshow(img_np)
+    plt.show()
+
+
+
+
