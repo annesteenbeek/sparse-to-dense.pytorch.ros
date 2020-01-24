@@ -4,10 +4,10 @@ import numpy as np
 from scipy.optimize import minimize_scalar
 
 
-sparse_points = np.load('dev/sparse_points.npy')
-est_points = np.load('dev/est_points.npy')
-targ_points = np.load('dev/targ_points.npy')
-n_points = np.load('dev/n_depths.npy')
+sparse_points = np.load('dev/scale/sparse_points.npy')
+est_points = np.load('dev/scale/est_points.npy')
+targ_points = np.load('dev/scale/targ_points.npy')
+n_points = np.load('dev/scale/n_depths.npy')
 
 n_points = n_points.astype(int)
 
