@@ -22,6 +22,7 @@ def get_result_msg(result, count=1):
     msg.delta3 = result.delta3
     msg.data_time = result.data_time
     msg.margin10 = result.margin10
+    msg.filtered = result.filtered
     msg.gpu_time = result.gpu_time
     msg.count = count
 

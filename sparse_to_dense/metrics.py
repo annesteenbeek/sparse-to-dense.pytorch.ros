@@ -13,7 +13,8 @@ class Result(object):
         self.absrel, self.lg10 = 0, 0
         self.delta1, self.delta2, self.delta3 = 0, 0, 0
         self.data_time, self.gpu_time = 0, 0
-        self.margin10 = 0
+        self.margin10 = 0.
+        self.filtered = 0.
 
     def set_to_worst(self):
         self.irmse, self.imae = np.inf, np.inf
@@ -21,15 +22,17 @@ class Result(object):
         self.absrel, self.lg10 = np.inf, np.inf
         self.delta1, self.delta2, self.delta3 = 0, 0, 0
         self.data_time, self.gpu_time = 0, 0
-        self.margin10 = 0
+        self.margin10 = 0.
+        self.filtered = np.inf
 
-    def update(self, irmse, imae, mse, rmse, mae, absrel, lg10, delta1, delta2, delta3, margin10, gpu_time, data_time):
+    def update(self, irmse, imae, mse, rmse, mae, absrel, lg10, delta1, delta2, delta3, margin10, filtered, gpu_time, data_time):
         self.irmse, self.imae = irmse, imae
         self.mse, self.rmse, self.mae = mse, rmse, mae
         self.absrel, self.lg10 = absrel, lg10
         self.delta1, self.delta2, self.delta3 = delta1, delta2, delta3
         self.data_time, self.gpu_time = data_time, gpu_time
         self.margin10 = margin10
+        self.filtered = filtered
 
     def evaluate(self, output, target):
         if target.is_cuda:
@@ -38,10 +41,15 @@ class Result(object):
             output = output.cpu()
 
         valid_mask = target>0
+        output_mask = output>0
+
         output = output[valid_mask]
         target = target[valid_mask]
 
-        if np.count_nonzero(valid_mask.cpu()) > 0:
+
+        n_valid = np.count_nonzero(valid_mask.cpu())
+
+        if n_valid > 0:
             abs_diff = (output - target).abs()
         else:
             return
@@ -58,6 +66,7 @@ class Result(object):
         self.delta3 = float((maxRatio < 1.25 ** 3).float().mean())
 
         self.margin10 = float((maxRatio < 1.10).float().mean())
+        self.filtered = float(1.-valid_mask.float().mean())
 
         self.data_time = 0
         self.gpu_time = 0
@@ -81,7 +90,8 @@ class AverageMeter(object):
         self.sum_absrel, self.sum_lg10 = 0, 0
         self.sum_delta1, self.sum_delta2, self.sum_delta3 = 0, 0, 0
         self.sum_data_time, self.sum_gpu_time = 0, 0
-        self.sum_margin10 = 0
+        self.sum_margin10 = 0.
+        self.sum_filtered = 0.
 
     def update(self, result, gpu_time, data_time, n=1):
         self.count += n
@@ -97,6 +107,7 @@ class AverageMeter(object):
         self.sum_delta2 += n*result.delta2
         self.sum_delta3 += n*result.delta3
         self.sum_margin10 += n*result.margin10
+        self.sum_filtered += n*result.filtered
         self.sum_data_time += n*data_time
         self.sum_gpu_time += n*gpu_time
 
@@ -107,6 +118,6 @@ class AverageMeter(object):
             self.sum_mse / self.count, self.sum_rmse / self.count, self.sum_mae / self.count, 
             self.sum_absrel / self.count, self.sum_lg10 / self.count,
             self.sum_delta1 / self.count, self.sum_delta2 / self.count, self.sum_delta3 / self.count,
-            self.sum_margin10 / self.count,
+            self.sum_margin10 / self.count, self.sum_filtered / self.count,
             self.sum_gpu_time / self.count, self.sum_data_time / self.count)
         return avg

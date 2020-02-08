@@ -44,8 +44,8 @@ class ROSNode(object):
         self.model.eval()
         self.img_lock = threading.Lock()
 
-        self.est_frame_saver = FrameSaver(prefix="est", enabled=False)
-        self.rgb_frame_saver = FrameSaver(prefix="rgb_est", enabled=False)
+        self.est_frame_saver = FrameSaver(prefix="est", enabled=True)
+        self.rgb_frame_saver = FrameSaver(prefix="rgb_est", enabled=True)
 
         target_topic = rospy.get_param("~target_topic", "")
         self.emulate_sparse_depth = rospy.get_param("~emulate_sparse_depth", False)
@@ -144,7 +144,7 @@ class ROSNode(object):
             self.frame_nr+= 1
             header = rgb_msg.header 
             if self.frame_nr < self.scale_samples:
-                    print("frame# %d" % self.frame_nr)
+                    print("frame# %d " % self.frame_nr)
                     self.predict_scale(rgb_msg, depth_msg, target_msg)
                     self.img_lock.release()
                     return
@@ -314,38 +314,43 @@ class ROSNode(object):
 
         # add preknown points to prediction
         in_depth = input_tensor[:, 3:, :, :]
-        in_valid = in_depth > 0.0
+        in_valid = in_depth > 0
         depth_pred[in_valid] = in_depth[in_valid]
 
         depth_pred_np = np.squeeze(depth_pred.data.cpu().numpy())
 
+        # remove points too far away
+        depth_pred_np[depth_pred_np > self.max_depth] = np.nan
+
+        # kdtree outlier removal
         # stat_mask = statistical_outlier_removal(depth_pred_np) 
         # depth_pred_np[stat_mask] = np.nan
+
+
 
         if self.filter_low_texture:
             rmask= region_mask(sparse_np)
             cmask = convex_mask(rmask)
             depth_pred_np[~cmask] = np.nan
 
-        # remove points too far away
-        depth_pred_np[depth_pred_np > self.max_depth] = np.nan
-
         if target_msg is not None:
             data_time = (rospy.Time.now()-start_time).to_sec()
             target_np = val_transform(target_msg, self.oheight, self.owidth)
             target_np[target_np > self.max_depth] = np.nan
-            # target_np[~cmask] = np.nan # also remove these points in target to evaluate
-            target_np[np.isnan(depth_pred_np)] = np.nan
+            target_np[~(depth_pred_np > 0)] = np.nan
             target_tensor = to_tensor(target_np)
             target_tensor = target_tensor.unsqueeze(0)
             self.evaluate_results(depth_pred, target_tensor, data_time)
             self.sample_metrics_tracker.evaluate(sparse_np, target_np)
 
-        self.est_frame_saver.save_image(depth_pred_np, rgb_msg.header.stamp)
-        self.rgb_frame_saver.save_image(rgb_np, rgb_msg.header.stamp)
-
         if self.use_tello:
-            depth_pred_np = 922./525 * depth_pred_np
+            focal_scale = 922./525
+            depth_pred_np *= focal_scale
+            sparse_np *= focal_scale
+
+        self.est_frame_saver.save_image(depth_pred_np, rgb_msg.header.stamp)
+        # self.est_frame_saver.save_image(target_np, rgb_msg.header.stamp)
+        self.rgb_frame_saver.save_image(rgb_np, rgb_msg.header.stamp)
 
         return depth_pred_np, sparse_np 
 
@@ -398,7 +403,6 @@ class ROSNode(object):
         rospy.spin()
         self.est_frame_saver.close()
         self.rgb_frame_saver.close()
-        # self.sample_metrics_tracker.save()
 
         # TMP
         np.save("sparse_points.npy", self.sparse_points)

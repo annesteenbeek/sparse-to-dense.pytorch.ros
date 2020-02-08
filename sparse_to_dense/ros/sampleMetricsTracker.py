@@ -12,9 +12,6 @@ class SampleMetricsTracker(object):
         self.sum_stde, self.sum_error = 0, 0
         self.count = 0
 
-        self.save_sparse = np.array([])
-        self.save_target = np.array([])
-
     def evaluate(self, sparse_np, target_np):
 
         depth_valid = sparse_np > 0
@@ -38,9 +35,6 @@ class SampleMetricsTracker(object):
         self.sum_rmse += np.sqrt(mse)
         self.sum_stde += np.std(error)
 
-        self.save_sparse = np.append(self.save_sparse, sparse_np[depth_valid])
-        self.save_target = np.append(self.save_target, target_np[depth_valid])
-
         self.publish(n_frame)
 
     def publish(self, n_frame):
@@ -60,9 +54,3 @@ class SampleMetricsTracker(object):
         msg.count = self.count
 
         self.metric_pub.publish(msg)
-
-    def save(self):
-        np.save("sparse_samples.npy", self.save_sparse)
-        np.save("target_samples.npy", self.save_target)
-        print("saved samples")
-
